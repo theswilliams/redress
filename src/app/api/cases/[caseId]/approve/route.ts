@@ -5,10 +5,11 @@ import { approvalDecisionSchema } from "@/lib/validation";
 import { writeAuditLog } from "@/lib/security/audit";
 import { getClientIp } from "@/lib/security/rateLimit";
 import { containsUnfilledPlaceholder } from "@/lib/ai/safetyLayer";
+import { sendClaimEmail } from "@/lib/email/send";
 
 export async function POST(request: Request, { params }: { params: Promise<{ caseId: string }> }) {
   const user = await requireUserApi();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user || !user.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { caseId } = await params;
   const ip = getClientIp(request.headers);
@@ -31,7 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const { decision, editedBody, decisionNotes } = parsed.data;
+  const { decision, editedBody, decisionNotes, recipientEmail } = parsed.data;
 
   const proposedAction = JSON.parse(approval.proposedAction) as { communicationId: string };
   const communication = await db.communication.findUnique({ where: { id: proposedAction.communicationId } });
@@ -59,37 +60,85 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
         { status: 400 },
       );
     }
-  }
+    if (!recipientEmail) {
+      return NextResponse.json(
+        { error: "Enter the merchant's contact email before approving — Redress never guesses or invents one." },
+        { status: 400 },
+      );
+    }
 
-  await db.userApproval.update({
-    where: { id: approval.id },
-    data: { decision, decisionNotes, decidedAt: new Date() },
-  });
-
-  if (decision === "approved") {
     if (editedBody) {
       await db.communication.update({ where: { id: communication.id }, data: { body: editedBody, draftedBy: "user" } });
     }
 
-    // No email/webform provider is configured in this MVP — sending is
-    // simulated so the workflow (approve -> submitted -> tracked) can be
-    // demonstrated end-to-end without silently claiming a real message was
-    // delivered. Wiring a real provider is the integration seam here.
-    await db.communication.update({
-      where: { id: communication.id },
-      data: { status: "sent", sentAt: new Date() },
+    const sendResult = await sendClaimEmail({
+      to: recipientEmail,
+      subject: finalSubject,
+      body: finalBody,
+      replyTo: user.email,
     });
 
-    await db.case.update({ where: { id: caseId }, data: { status: "submitted" } });
-
-    await db.caseEvent.create({
-      data: {
-        caseId,
-        type: "approval",
-        message: "You approved the request. (Simulated submission — no email provider is connected in this environment.)",
-      },
-    });
+    if (sendResult.ok) {
+      await db.communication.update({
+        where: { id: communication.id },
+        data: { recipientEmail, status: "sent", sentAt: new Date(), sendError: null },
+      });
+      await db.userApproval.update({
+        where: { id: approval.id },
+        data: { decision, decisionNotes, decidedAt: new Date() },
+      });
+      await db.case.update({ where: { id: caseId }, data: { status: "submitted" } });
+      await db.caseEvent.create({
+        data: {
+          caseId,
+          type: "approval",
+          message: `You approved the request. It was sent to ${recipientEmail}.`,
+          metadata: JSON.stringify({ providerMessageId: sendResult.providerMessageId }),
+        },
+      });
+    } else if (sendResult.error === "EMAIL_NOT_CONFIGURED") {
+      // No email provider is configured — sending is simulated so the
+      // workflow (approve -> submitted -> tracked) can be demonstrated
+      // end-to-end without silently claiming a real message was delivered.
+      await db.communication.update({
+        where: { id: communication.id },
+        data: { recipientEmail, status: "sent", sentAt: new Date(), sendError: null },
+      });
+      await db.userApproval.update({
+        where: { id: approval.id },
+        data: { decision, decisionNotes, decidedAt: new Date() },
+      });
+      await db.case.update({ where: { id: caseId }, data: { status: "submitted" } });
+      await db.caseEvent.create({
+        data: {
+          caseId,
+          type: "approval",
+          message: `You approved the request. (Simulated submission to ${recipientEmail} — no email provider is connected in this environment.)`,
+        },
+      });
+    } else {
+      // Leave the approval pending so the user can fix the address or retry after a transient provider error.
+      await db.communication.update({
+        where: { id: communication.id },
+        data: { recipientEmail, status: "send_failed", sendError: sendResult.error },
+      });
+      await db.caseEvent.create({
+        data: { caseId, type: "system", message: `Sending to ${recipientEmail} failed: ${sendResult.error}` },
+      });
+      await writeAuditLog({
+        userId: user.id,
+        action: "approval.send_failed",
+        resource: `case:${caseId}`,
+        ip,
+        metadata: { recipientEmail, error: sendResult.error },
+      });
+      return NextResponse.json({ error: `Couldn't send the email: ${sendResult.error}` }, { status: 502 });
+    }
   } else {
+    await db.userApproval.update({
+      where: { id: approval.id },
+      data: { decision, decisionNotes, decidedAt: new Date() },
+    });
     await db.case.update({ where: { id: caseId }, data: { status: "closed" } });
     await db.caseEvent.create({
       data: { caseId, type: "approval", message: "You chose not to pursue this recommendation." },

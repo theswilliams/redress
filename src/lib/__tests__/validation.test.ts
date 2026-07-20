@@ -46,4 +46,15 @@ describe("approvalDecisionSchema", () => {
     const result = approvalDecisionSchema.safeParse({ decision: "maybe" });
     expect(result.success).toBe(false);
   });
+
+  it("accepts an approval with a valid recipient email", () => {
+    const result = approvalDecisionSchema.safeParse({ decision: "approved", recipientEmail: "Support@Merchant.com" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.recipientEmail).toBe("support@merchant.com");
+  });
+
+  it("rejects a malformed recipient email", () => {
+    const result = approvalDecisionSchema.safeParse({ decision: "approved", recipientEmail: "not-an-email" });
+    expect(result.success).toBe(false);
+  });
 });

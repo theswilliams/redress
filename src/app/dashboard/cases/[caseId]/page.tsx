@@ -64,6 +64,10 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ cas
           subject={pendingCommunication.subject ?? ""}
           body={pendingCommunication.body}
           summary={(JSON.parse(pendingApproval.proposedAction) as { summary: string }).summary}
+          initialRecipientEmail={pendingCommunication.recipientEmail}
+          sendError={
+            pendingCommunication.status === "send_failed" ? pendingCommunication.sendError : null
+          }
         />
       )}
 

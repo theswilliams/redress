@@ -9,21 +9,27 @@ export function ApprovalPanel({
   subject,
   body,
   summary,
+  initialRecipientEmail,
+  sendError,
 }: {
   caseId: string;
   subject: string;
   body: string;
   summary: string;
+  initialRecipientEmail?: string | null;
+  sendError?: string | null;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(body);
+  const [recipientEmail, setRecipientEmail] = useState(initialRecipientEmail ?? "");
   const [note, setNote] = useState("");
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(sendError ?? null);
 
   const hasPlaceholder = containsUnfilledPlaceholder(draft) || containsUnfilledPlaceholder(subject);
+  const recipientEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail.trim());
 
   async function submitDecision(decision: "approved" | "rejected" | "edited") {
     setError(null);
@@ -32,7 +38,11 @@ export function ApprovalPanel({
       const res = await fetch(`/api/cases/${caseId}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision, editedBody: decision !== "rejected" ? draft : undefined }),
+        body: JSON.stringify({
+          decision,
+          editedBody: decision !== "rejected" ? draft : undefined,
+          recipientEmail: decision === "approved" ? recipientEmail.trim() : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -95,6 +105,25 @@ export function ApprovalPanel({
         </p>
       )}
 
+      {!editing && (
+        <div className="mt-4">
+          <label htmlFor="recipientEmail" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">
+            Send to (merchant's contact email)
+          </label>
+          <input
+            id="recipientEmail"
+            type="email"
+            value={recipientEmail}
+            onChange={(e) => setRecipientEmail(e.target.value)}
+            placeholder="support@merchant.com"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-brand"
+          />
+          <p className="mt-1 text-xs text-muted">
+            Redress never guesses this — find it on the merchant&apos;s receipt, order confirmation, or website.
+          </p>
+        </div>
+      )}
+
       {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -121,11 +150,17 @@ export function ApprovalPanel({
           <>
             <button
               onClick={() => submitDecision("approved")}
-              disabled={loading !== null || hasPlaceholder}
-              title={hasPlaceholder ? "Edit the message to remove the placeholder before approving" : undefined}
+              disabled={loading !== null || hasPlaceholder || !recipientEmailValid}
+              title={
+                hasPlaceholder
+                  ? "Edit the message to remove the placeholder before approving"
+                  : !recipientEmailValid
+                    ? "Enter the merchant's contact email before approving"
+                    : undefined
+              }
               className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60"
             >
-              {loading === "approved" ? "Submitting…" : "Approve & Submit"}
+              {loading === "approved" ? "Sending…" : "Approve & Submit"}
             </button>
             <button
               onClick={() => setEditing(true)}

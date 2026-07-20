@@ -30,4 +30,7 @@ export const approvalDecisionSchema = z.object({
   decision: z.enum(["approved", "rejected", "edited"]),
   editedBody: z.string().trim().max(8000).optional(),
   decisionNotes: z.string().trim().max(2000).optional(),
+  // Required when decision === "approved" — validated in the route handler
+  // rather than here, since it's conditional on another field.
+  recipientEmail: z.string().trim().toLowerCase().email().optional(),
 });

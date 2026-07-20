@@ -217,10 +217,12 @@ model Communication {
 
   direction      String   // outbound | inbound
   channel        String   @default("email") // email | webform | letter
+  recipientEmail String?  // merchant contact email, supplied by the user at approval time — never guessed/fabricated
   subject        String?
   body           String
   draftedBy      String   @default("ai") // ai | user
-  status         String   @default("draft") // draft | approved | sent | received
+  status         String   @default("draft") // draft | approved | sent | received | send_failed
+  sendError      String?
   approvalId     String?  @unique
   approval       UserApproval? @relation(fields: [approvalId], references: [id])
 
