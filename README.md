@@ -5,31 +5,51 @@ AI-powered consumer advocacy platform. Upload a receipt, bill, or customer-servi
 ## Stack
 
 - Next.js 16 (App Router) + TypeScript + Tailwind
-- Prisma 7 (SQLite locally via `@prisma/adapter-better-sqlite3`; swap the datasource provider for Postgres in production)
+- Prisma 7 on PostgreSQL via `@prisma/adapter-neon` (Vercel Postgres / Neon)
 - Auth.js (NextAuth v5) credentials provider, bcrypt password hashing, JWT sessions
 - Google Gemini API for the AI agent pipeline (document analysis, opportunity detection, policy research, claim drafting)
 - Resend for sending approved claim emails
-- Local filesystem object storage behind an abstraction (`src/lib/storage.ts`) — swappable for S3
+- Vercel Blob for uploaded document storage (`src/lib/storage.ts`), with a local-filesystem fallback for local dev only
 - DB-backed job queue (`Job` model) for the analysis pipeline — swappable for a real queue (BullMQ/SQS/etc)
 - Vitest for unit tests
 
 ## Getting started
 
+1. Copy `.env.example` to `.env`.
+2. Set `DATABASE_URL` to a real Postgres connection string — see [Deployment](#deployment) below for how to get one. The app cannot start without this; there is no SQLite fallback.
+3. Fill in `AUTH_SECRET` (`npx auth secret` or `openssl rand -base64 32`).
+
 ```bash
 npm install
-npx prisma migrate dev   # creates dev.db and applies the schema
+npx prisma migrate dev --name init   # applies the schema to your Postgres database
 npm run dev
 ```
 
-Copy `.env.example` to `.env` and fill in `GEMINI_API_KEY` to enable real AI analysis (free tier, no card required — get one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)). Without a key, the app runs in **demo mode**: uploads and the full case workflow still work, but every AI agent returns a clearly-labeled placeholder instead of a real analysis.
+Fill in `GEMINI_API_KEY` to enable real AI analysis (free tier, no card required — get one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)). Without a key, the app runs in **demo mode**: uploads and the full case workflow still work, but every AI agent returns a clearly-labeled placeholder instead of a real analysis.
 
 Fill in `RESEND_API_KEY` to enable real email delivery (free tier, no card required — get one at [resend.com/api-keys](https://resend.com/api-keys)). Without a key, an approved submission is simulated (clearly labeled as such) instead of actually sent. Note: until you [verify a custom domain](https://resend.com/docs/dashboard/domains/introduction) with Resend and set `EMAIL_FROM` to an address on it, the default sandbox sender can only deliver to the email address of the Resend account owner — not to arbitrary merchants.
+
+Fill in `BLOB_READ_WRITE_TOKEN` to store uploads in Vercel Blob. Without it, uploads fall back to the local filesystem — fine for local dev, but this fallback does **not** work when deployed to Vercel (serverless functions have a read-only filesystem outside `/tmp`, which is wiped between invocations).
 
 ## Tests
 
 ```bash
 npm test
 ```
+
+## Deployment
+
+Target stack: **Vercel** (hosting) + **Vercel Postgres** (Neon-backed) + **Vercel Blob** (file storage) — all three are provisioned from the same Vercel project, no separate accounts needed beyond Vercel itself.
+
+1. **Create a Vercel account** and connect it to the GitHub account hosting this repo.
+2. **Import the project**: Vercel dashboard → Add New → Project → select this repo. Don't deploy yet — add storage first so the env vars exist for the first build.
+3. **Add Postgres**: Project → Storage tab → Create Database → Postgres. This auto-injects `DATABASE_URL` (and a few Prisma-specific variants) into the project's environment variables for all environments (production/preview/development).
+4. **Add Blob storage**: Project → Storage tab → Create → Blob. This auto-injects `BLOB_READ_WRITE_TOKEN`.
+5. **Add the remaining secrets manually** in Project → Settings → Environment Variables: `AUTH_SECRET`, `GEMINI_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, `REDRESS_SUCCESS_FEE_PERCENT`.
+6. **Deploy**. The build script (`prisma migrate deploy && next build`) applies any pending migrations against the production database automatically before building — no separate migration step needed.
+7. For local dev against the same database, copy the `DATABASE_URL` Vercel generated into your local `.env` (or create a separate Neon branch for dev via the Neon dashboard, linked from the Vercel Storage tab, so local work doesn't touch production data).
+
+There is currently no `vercel.json` — none of the above requires one; it's all zero-config for a standard Next.js app.
 
 ## Architecture notes
 

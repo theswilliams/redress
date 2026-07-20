@@ -1,9 +1,13 @@
 // Redress database schema.
 //
 // Enums are modeled as plain strings (with TS union types in src/lib/types.ts)
-// rather than Prisma enums so the schema stays portable between SQLite (local
-// dev) and PostgreSQL (production) with only the datasource provider/url
-// changing.
+// rather than Prisma enums — a holdover from when this ran on SQLite, which
+// has no native enum support. Kept this way after the move to PostgreSQL so
+// the two stay in sync without a migration.
+//
+// Runs on Postgres (Vercel Postgres / Neon) via @prisma/adapter-neon — see
+// src/lib/db.ts. Local dev also points at a real Postgres database (a Neon
+// branch is the easiest option); there is no SQLite fallback.
 
 generator client {
   provider = "prisma-client"
@@ -11,7 +15,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // ---------------------------------------------------------------------------
