@@ -13,7 +13,7 @@ export default async function ResetPasswordConfirmPage({
       {token ? (
         <ResetPasswordConfirmForm token={token} />
       ) : (
-        <p className="mt-4 text-sm text-red-600">This reset link is missing a token. Request a new one.</p>
+        <p className="mt-4 text-sm text-red-600 dark:text-red-400">This reset link is missing a token. Request a new one.</p>
       )}
     </div>
   );

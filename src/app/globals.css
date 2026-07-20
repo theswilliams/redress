@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Manual dark mode: a `dark` class on <html> (toggled by ThemeProvider,
+   applied pre-hydration by the inline script in layout.tsx) activates the
+   `dark:` variant, rather than relying solely on OS preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #fbfaf8;
   --foreground: #14171a;
@@ -9,6 +14,20 @@
   --muted: #6b7280;
   --border: #e6e4df;
   --card: #ffffff;
+}
+
+.dark {
+  --background: #0e1210;
+  --foreground: #eef1ef;
+  /* Kept dark/saturated enough that bg-brand + white text (used on every CTA
+     button) stays readable; brand-dark is a bright mint reserved for
+     emphasis text and hover states on dark surfaces. */
+  --brand: #0e8f70;
+  --brand-dark: #5eead4;
+  --brand-light: #153a2f;
+  --muted: #9aa3a0;
+  --border: #263129;
+  --card: #161b18;
 }
 
 @theme inline {
@@ -28,4 +47,5 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }

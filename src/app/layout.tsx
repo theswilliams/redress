@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
+import { ThemeProvider, THEME_INIT_SCRIPT } from "@/components/providers/theme-provider";
 import { SiteHeader } from "@/components/site-header";
 
 const geistSans = Geist({
@@ -26,12 +27,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="flex min-h-full flex-col">
-        <AuthSessionProvider>
-          <SiteHeader />
-          <div className="flex flex-1 flex-col">{children}</div>
-        </AuthSessionProvider>
+        <ThemeProvider>
+          <AuthSessionProvider>
+            <SiteHeader />
+            <div className="flex flex-1 flex-col">{children}</div>
+          </AuthSessionProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

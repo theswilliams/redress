@@ -89,13 +89,13 @@ export function ApprovalPanel({
       </div>
 
       {hasPlaceholder && !editing && (
-        <p className="mt-3 text-sm text-amber-700">
+        <p className="mt-3 text-sm text-amber-700 dark:text-amber-400">
           This message still has an unfilled placeholder (shown in brackets) — edit it to fill in the details before
           you can approve and submit.
         </p>
       )}
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <div className="mt-4 flex flex-wrap gap-2">
         {editing ? (
@@ -142,7 +142,7 @@ export function ApprovalPanel({
             <button
               onClick={() => submitDecision("rejected")}
               disabled={loading !== null}
-              className="rounded-full px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60"
+              className="rounded-full px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-950"
             >
               {loading === "rejected" ? "Saving…" : "Reject Recommendation"}
             </button>

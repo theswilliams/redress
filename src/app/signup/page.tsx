@@ -94,7 +94,7 @@ export default function SignUpPage() {
           <p className="mt-1 text-xs text-muted">At least 8 characters.</p>
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         <button
           type="submit"

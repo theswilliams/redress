@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function SiteHeader() {
   const { data: session, status } = useSession();
@@ -17,6 +18,7 @@ export function SiteHeader() {
         </Link>
 
         <nav className="flex items-center gap-3">
+          <ThemeToggle />
           {status === "authenticated" ? (
             <>
               <Link
