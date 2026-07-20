@@ -1,0 +1,358 @@
+// Recoverly database schema.
+//
+// Enums are modeled as plain strings (with TS union types in src/lib/types.ts)
+// rather than Prisma enums so the schema stays portable between SQLite (local
+// dev) and PostgreSQL (production) with only the datasource provider/url
+// changing.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------------------------------------------------------------------------
+// Users & auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  name           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Business model config snapshot for this user (see BillingConfig).
+  // Kept denormalized-simple for MVP; see Subscription for plan state.
+  cases          Case[]
+  documents      Document[]
+  approvals      UserApproval[]
+  subscriptions  Subscription[]
+  payments       Payment[]
+  auditLogs      AuditLog[]
+  passwordResets PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Cases
+// ---------------------------------------------------------------------------
+
+model Case {
+  id                     String   @id @default(cuid())
+  userId                 String
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  merchant               String?
+  caseType               String   // refund | partial_refund | price_adjustment | subscription_cancellation | warranty_claim | compensation | billing_correction | return | service_credit | unknown
+  problemCategory        String   // maps to the landing "what problem" options
+  userStatedProblem      String?  // free-text context from the user
+
+  originalAmountCents    Int?
+  potentialRecoveryCents Int?
+  confirmedRecoveryCents Int?
+  currency               String   @default("USD")
+
+  confidenceLevel        String   @default("low") // low | medium | high
+  status                 String   @default("analysis_in_progress")
+  // analysis_in_progress | information_needed | ready_for_review | approved |
+  // submitted | awaiting_response | additional_information_requested |
+  // resolved | rejected | closed
+
+  requiredAction         String?
+  deadlineAt             DateTime?
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  documents              Document[]
+  transactions           Transaction[]
+  analyses               AIAnalysis[]
+  communications         Communication[]
+  events                 CaseEvent[]
+  approvals              UserApproval[]
+  outcomes               RecoveryOutcome[]
+  policySources          PolicySource[]
+  jobs                   Job[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model CaseEvent {
+  id        String   @id @default(cuid())
+  caseId    String
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  type      String   // status_change | note | system | ai_analysis | document_added | communication_sent | approval
+  message   String
+  metadata  String?  // JSON blob
+  createdAt DateTime @default(now())
+
+  @@index([caseId])
+}
+
+// ---------------------------------------------------------------------------
+// Documents
+// ---------------------------------------------------------------------------
+
+model Document {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  caseId        String?
+  case          Case?    @relation(fields: [caseId], references: [id], onDelete: SetNull)
+
+  fileName      String
+  storageKey    String   // path/key within the object storage abstraction
+  mimeType      String
+  sizeBytes     Int
+  sha256        String
+
+  scanStatus    String   @default("pending") // pending | clean | flagged | error
+  extractedText String?  // raw text extracted for AI processing (untrusted input)
+
+  createdAt     DateTime @default(now())
+
+  analyses      AIAnalysis[]
+
+  @@index([userId])
+  @@index([caseId])
+}
+
+// ---------------------------------------------------------------------------
+// Transactions (structured facts extracted or confirmed for a case)
+// ---------------------------------------------------------------------------
+
+model Transaction {
+  id             String   @id @default(cuid())
+  caseId         String
+  case           Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  merchant       String?
+  product        String?
+  purchaseDate   DateTime?
+  amountCents    Int?
+  currency       String   @default("USD")
+  paymentMethod  String?
+  orderNumber    String?
+  deliveryDate   DateTime?
+
+  source         String   @default("ai_extracted") // ai_extracted | user_provided
+  confidence     String   @default("medium")        // low | medium | high
+
+  createdAt      DateTime @default(now())
+
+  @@index([caseId])
+}
+
+// ---------------------------------------------------------------------------
+// AI analyses
+// ---------------------------------------------------------------------------
+
+model AIAnalysis {
+  id               String    @id @default(cuid())
+  caseId           String
+  case             Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  documentId       String?
+  document         Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  agent            String    // document_analysis | opportunity_detection | research | claim_drafting | case_management | safety_layer
+  input            String    // JSON blob of what was sent to the agent (sanitized)
+  output           String    // JSON blob of the agent's structured output
+  model            String?
+  confidence       String?   // low | medium | high
+  flaggedForReview Boolean   @default(false)
+  flagReason       String?
+
+  createdAt        DateTime  @default(now())
+
+  @@index([caseId])
+  @@index([documentId])
+}
+
+// ---------------------------------------------------------------------------
+// Policy research
+// ---------------------------------------------------------------------------
+
+model PolicySource {
+  id             String   @id @default(cuid())
+  caseId         String
+  case           Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  merchant       String?
+  policyType     String   // return | price_adjustment | warranty | shipping_guarantee | subscription_cancellation | compensation
+  url            String?
+  excerpt        String?
+  certainty      String   // confirmed_policy | likely_possibility | user_specific_assumption | unknown
+  accessedAt     DateTime @default(now())
+
+  createdAt      DateTime @default(now())
+
+  @@index([caseId])
+}
+
+// ---------------------------------------------------------------------------
+// Communications (AI-drafted messages sent on the user's behalf)
+// ---------------------------------------------------------------------------
+
+model Communication {
+  id             String   @id @default(cuid())
+  caseId         String
+  case           Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  direction      String   // outbound | inbound
+  channel        String   @default("email") // email | webform | letter
+  subject        String?
+  body           String
+  draftedBy      String   @default("ai") // ai | user
+  status         String   @default("draft") // draft | approved | sent | received
+  approvalId     String?  @unique
+  approval       UserApproval? @relation(fields: [approvalId], references: [id])
+
+  createdAt      DateTime @default(now())
+  sentAt         DateTime?
+
+  @@index([caseId])
+}
+
+// ---------------------------------------------------------------------------
+// User approvals (the gate before any external action)
+// ---------------------------------------------------------------------------
+
+model UserApproval {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  caseId         String
+  case           Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  actionType     String   // submit_claim | cancel_subscription | request_refund | other
+  proposedAction String   // JSON snapshot of what will happen
+  decision       String   @default("pending") // pending | approved | rejected | edited
+  decisionNotes  String?
+  decidedAt      DateTime?
+
+  createdAt      DateTime @default(now())
+
+  communication  Communication?
+
+  @@index([userId])
+  @@index([caseId])
+}
+
+// ---------------------------------------------------------------------------
+// Recovery outcomes
+// ---------------------------------------------------------------------------
+
+model RecoveryOutcome {
+  id               String   @id @default(cuid())
+  caseId           String
+  case             Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  outcomeType      String   // refund | partial_refund | credit | cancellation_confirmed | no_recovery
+  recoveredCents   Int      @default(0)
+  currency         String   @default("USD")
+  resolvedAt       DateTime @default(now())
+  notes            String?
+
+  createdAt        DateTime @default(now())
+
+  @@index([caseId])
+}
+
+// ---------------------------------------------------------------------------
+// Billing (configurable, not hard-coded to one fee model)
+// ---------------------------------------------------------------------------
+
+model Subscription {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  planKey        String   // references a plan defined in billing config, e.g. "free", "pro_monthly"
+  status         String   @default("active") // active | past_due | canceled | trialing
+  currentPeriodEnd DateTime?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  payments       Payment[]
+
+  @@index([userId])
+}
+
+model Payment {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  kind           String   // subscription | success_fee | one_time
+  amountCents    Int
+  currency       String   @default("USD")
+  status         String   @default("pending") // pending | succeeded | failed | refunded
+  relatedCaseId  String?
+  description    String?
+
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Background jobs (DB-backed queue for long-running AI workflows)
+// ---------------------------------------------------------------------------
+
+model Job {
+  id           String    @id @default(cuid())
+  caseId       String?
+  case         Case?     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  type         String    // analyze_document | detect_opportunity | research_policy | draft_claim
+  status       String    @default("queued") // queued | running | succeeded | failed
+  payload      String?   // JSON blob
+  error        String?
+  attempts     Int       @default(0)
+
+  createdAt    DateTime  @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+
+  @@index([caseId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Security / audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  action    String   // e.g. "case.create", "document.upload", "approval.decide"
+  resource  String?  // e.g. "case:abc123"
+  ip        String?
+  metadata  String?  // JSON blob
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+}
