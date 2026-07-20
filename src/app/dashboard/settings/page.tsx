@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { getBillingConfig, formatSuccessFeeCopy } from "@/lib/billing/config";
 import { formatCents, formatDate } from "@/lib/format";
+import { DangerZone } from "@/components/danger-zone";
 
 export default async function SettingsPage() {
   const currentUser = await requireUser();
@@ -21,7 +22,14 @@ export default async function SettingsPage() {
           <dt className="text-muted">Name</dt>
           <dd>{user.name ?? "—"}</dd>
           <dt className="text-muted">Email</dt>
-          <dd>{user.email}</dd>
+          <dd>
+            {user.email}{" "}
+            {user.emailVerifiedAt ? (
+              <span className="text-xs font-semibold text-brand-dark">Verified</span>
+            ) : (
+              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Not verified</span>
+            )}
+          </dd>
           <dt className="text-muted">Member since</dt>
           <dd>{formatDate(user.createdAt)}</dd>
         </dl>
@@ -56,6 +64,8 @@ export default async function SettingsPage() {
           </div>
         )}
       </section>
+
+      <DangerZone />
     </div>
   );
 }

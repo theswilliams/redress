@@ -19,25 +19,39 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model User {
-  id             String   @id @default(cuid())
-  email          String   @unique
-  passwordHash   String
-  name           String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(cuid())
+  email           String   @unique
+  passwordHash    String
+  name            String?
+  emailVerifiedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // Business model config snapshot for this user (see BillingConfig).
   // Kept denormalized-simple for MVP; see Subscription for plan state.
-  cases          Case[]
-  documents      Document[]
-  approvals      UserApproval[]
-  subscriptions  Subscription[]
-  payments       Payment[]
-  auditLogs      AuditLog[]
-  passwordResets PasswordResetToken[]
+  cases                Case[]
+  documents            Document[]
+  approvals            UserApproval[]
+  subscriptions        Subscription[]
+  payments             Payment[]
+  auditLogs            AuditLog[]
+  passwordResets       PasswordResetToken[]
+  emailVerifications   EmailVerificationToken[]
 }
 
 model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model EmailVerificationToken {
   id        String   @id @default(cuid())
   token     String   @unique
   userId    String

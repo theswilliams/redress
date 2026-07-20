@@ -71,3 +71,17 @@ export function sendPasswordResetEmail(params: { to: string; resetUrl: string })
     ].join("\n"),
   });
 }
+
+export function sendVerificationEmail(params: { to: string; verifyUrl: string }) {
+  return sendEmail({
+    to: params.to,
+    subject: "Verify your Redress email address",
+    body: [
+      "Welcome to Redress! Please verify your email address to finish setting up your account.",
+      "",
+      `Verify it here: ${params.verifyUrl}`,
+      "",
+      "This link expires in 24 hours. If you didn't create a Redress account, you can safely ignore this email.",
+    ].join("\n"),
+  });
+}

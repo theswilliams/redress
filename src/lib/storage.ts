@@ -5,7 +5,7 @@
 // app/api/documents/[documentId]/route.ts).
 
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
+import { mkdir, readFile, writeFile, unlink, rm } from "node:fs/promises";
 import path from "node:path";
 
 const STORAGE_ROOT = path.resolve(process.cwd(), process.env.STORAGE_ROOT ?? "./storage/uploads");
@@ -53,4 +53,13 @@ export async function deleteUpload(storageKey: string): Promise<void> {
     throw new Error("Invalid storage path");
   }
   await unlink(fullPath).catch(() => undefined);
+}
+
+/** Deletes every uploaded file for a user, e.g. as part of account deletion. */
+export async function deleteAllUploadsForUser(userId: string): Promise<void> {
+  const dir = path.join(STORAGE_ROOT, userId);
+  if (!dir.startsWith(STORAGE_ROOT)) {
+    throw new Error("Invalid storage path");
+  }
+  await rm(dir, { recursive: true, force: true });
 }

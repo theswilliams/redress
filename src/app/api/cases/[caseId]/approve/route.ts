@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireUserApi } from "@/lib/session";
 import { approvalDecisionSchema } from "@/lib/validation";
 import { writeAuditLog } from "@/lib/security/audit";
-import { getClientIp } from "@/lib/security/rateLimit";
+import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { containsUnfilledPlaceholder } from "@/lib/ai/safetyLayer";
 import { sendClaimEmail } from "@/lib/email/send";
 
@@ -13,6 +13,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
 
   const { caseId } = await params;
   const ip = getClientIp(request.headers);
+
+  const { allowed } = rateLimit(`approve:${user.id}`, { limit: 10, windowMs: 60_000 });
+  if (!allowed) {
+    return NextResponse.json({ error: "Too many attempts. Try again shortly." }, { status: 429 });
+  }
 
   const caseRecord = await db.case.findUnique({ where: { id: caseId } });
   if (!caseRecord || caseRecord.userId !== user.id) {

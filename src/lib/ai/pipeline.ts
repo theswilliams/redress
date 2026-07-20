@@ -30,6 +30,18 @@ export async function runAnalysisPipeline(caseId: string, documentId: string) {
     db.document.findUniqueOrThrow({ where: { id: documentId } }),
   ]);
 
+  // Re-running analysis (e.g. after the user adds more information) would
+  // otherwise leave a prior pending approval/draft orphaned — a user could
+  // then approve a stale draft that doesn't reflect the new context. Mark
+  // any prior pending approval as superseded before generating a new one.
+  const priorPendingApprovals = await db.userApproval.findMany({ where: { caseId, decision: "pending" } });
+  for (const prior of priorPendingApprovals) {
+    await db.userApproval.update({
+      where: { id: prior.id },
+      data: { decision: "rejected", decisionNotes: "Superseded by re-analysis.", decidedAt: new Date() },
+    });
+  }
+
   const bytes = await readUpload(document.storageKey);
 
   // 1. Document Analysis Agent

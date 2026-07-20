@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { signUpSchema } from "@/lib/validation";
 import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { writeAuditLog } from "@/lib/security/audit";
+import { issueEmailVerification } from "@/lib/emailVerification";
 
 export async function POST(request: Request) {
   const ip = getClientIp(request.headers);
@@ -37,6 +38,13 @@ export async function POST(request: Request) {
     resource: `user:${user.id}`,
     ip,
   });
+
+  const { verifyPath } = await issueEmailVerification({ userId: user.id, email: user.email, requestUrl: request.url, ip });
+
+  // Local dev convenience, same pattern as password reset.
+  if (process.env.NODE_ENV !== "production") {
+    return NextResponse.json({ ok: true, devVerifyUrl: verifyPath });
+  }
 
   return NextResponse.json({ ok: true });
 }

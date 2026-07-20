@@ -8,6 +8,7 @@ import { enqueueJob } from "@/lib/jobs/queue";
 import { processQueuedJobs } from "@/lib/jobs/worker";
 import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { writeAuditLog } from "@/lib/security/audit";
+import { sniffFileType } from "@/lib/security/fileSignature";
 
 export async function GET() {
   const user = await requireUserApi();
@@ -60,6 +61,16 @@ export async function POST(request: Request) {
 
   const bytes = Buffer.from(await file.arrayBuffer());
 
+  // The client-declared MIME type is trivially spoofable — verify what the
+  // bytes actually are before storing or handing them to the AI pipeline.
+  const sniffedType = sniffFileType(bytes);
+  if (!sniffedType) {
+    return NextResponse.json(
+      { error: "This file doesn't look like a valid PDF, PNG, JPEG, or WEBP. It may be corrupted or a different file type." },
+      { status: 400 },
+    );
+  }
+
   const { problemCategory, userStatedProblem } = parsed.data;
 
   const caseRecord = await db.case.create({
@@ -84,10 +95,13 @@ export async function POST(request: Request) {
       caseId: caseRecord.id,
       fileName: file.name,
       storageKey,
-      mimeType: file.type,
+      mimeType: sniffedType,
       sizeBytes,
       sha256,
-      scanStatus: "clean", // placeholder: see docs/SECURITY.md for the malware-scanning integration seam
+      // File type is verified against real content bytes above (sniffFileType), not just the
+      // client-declared MIME type. "clean" here is still a placeholder for real antivirus
+      // scanning (e.g. ClamAV or VirusTotal) — that's a further integration seam, not yet wired up.
+      scanStatus: "clean",
     },
   });
 

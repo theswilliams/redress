@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
+import { db } from "@/lib/db";
+import { VerifyEmailBanner } from "@/components/verify-email-banner";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview" },
@@ -9,7 +11,8 @@ const NAV_ITEMS = [
 ];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  await requireUser();
+  const user = await requireUser();
+  const dbUser = await db.user.findUnique({ where: { id: user.id }, select: { emailVerifiedAt: true } });
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 gap-8 px-4 py-8 sm:px-6">
@@ -26,7 +29,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
           ))}
         </nav>
       </aside>
-      <main className="min-w-0 flex-1">{children}</main>
+      <main className="min-w-0 flex-1">
+        {dbUser && !dbUser.emailVerifiedAt && <VerifyEmailBanner />}
+        {children}
+      </main>
     </div>
   );
 }

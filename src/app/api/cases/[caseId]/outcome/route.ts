@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { requireUserApi } from "@/lib/session";
 import { recordOutcomeSchema, stillWaitingSchema } from "@/lib/validation";
 import { writeAuditLog } from "@/lib/security/audit";
-import { getClientIp } from "@/lib/security/rateLimit";
+import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { OUTCOME_TYPE_LABELS, RECORDABLE_OUTCOME_STATUSES, type CaseStatus, type OutcomeType } from "@/lib/types";
 
 const actionSchema = z.object({ action: z.enum(["record_outcome", "mark_waiting"]) });
@@ -15,6 +15,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
 
   const { caseId } = await params;
   const ip = getClientIp(request.headers);
+
+  const { allowed } = rateLimit(`outcome:${user.id}`, { limit: 20, windowMs: 60_000 });
+  if (!allowed) {
+    return NextResponse.json({ error: "Too many attempts. Try again shortly." }, { status: 429 });
+  }
 
   const caseRecord = await db.case.findUnique({ where: { id: caseId } });
   if (!caseRecord || caseRecord.userId !== user.id) {
