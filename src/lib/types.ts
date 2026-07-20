@@ -77,6 +77,13 @@ export const CASE_STATUS_LABELS: Record<CaseStatus, string> = {
   closed: "Closed",
 };
 
+// A case only has an outcome to record once something has actually been sent.
+export const RECORDABLE_OUTCOME_STATUSES: CaseStatus[] = [
+  "submitted",
+  "awaiting_response",
+  "additional_information_requested",
+];
+
 export const CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
 export type ConfidenceLevel = (typeof CONFIDENCE_LEVELS)[number];
 
@@ -108,6 +115,17 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 
 export const APPROVAL_DECISIONS = ["pending", "approved", "rejected", "edited"] as const;
 export type ApprovalDecision = (typeof APPROVAL_DECISIONS)[number];
+
+export const OUTCOME_TYPES = ["refund", "partial_refund", "credit", "cancellation_confirmed", "no_recovery"] as const;
+export type OutcomeType = (typeof OUTCOME_TYPES)[number];
+
+export const OUTCOME_TYPE_LABELS: Record<OutcomeType, string> = {
+  refund: "Full refund",
+  partial_refund: "Partial refund",
+  credit: "Store/service credit",
+  cancellation_confirmed: "Cancellation confirmed",
+  no_recovery: "No recovery",
+};
 
 export const ALLOWED_UPLOAD_MIME_TYPES = [
   "application/pdf",

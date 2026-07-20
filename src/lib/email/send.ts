@@ -3,18 +3,17 @@ import { getEmailClient, isEmailConfigured, EMAIL_FROM } from "@/lib/email/clien
 export type SendEmailResult = { ok: true; providerMessageId: string } | { ok: false; error: string };
 
 /**
- * Sends the approved claim message to the merchant. This is only ever called
- * after a user has explicitly approved a case (see
- * app/api/cases/[caseId]/approve/route.ts) — never automatically.
- *
- * replyTo is set to the user's own email so any merchant response goes
- * straight to them, not to Redress.
+ * Generic transactional send. Returns a typed result instead of throwing so
+ * callers can decide how to handle failure (e.g. the claim-approval flow
+ * surfaces it to the user and lets them retry; account emails like password
+ * resets log it and respond identically either way, so as not to leak
+ * account existence).
  */
-export async function sendClaimEmail(params: {
+export async function sendEmail(params: {
   to: string;
   subject: string;
   body: string;
-  replyTo: string;
+  replyTo?: string;
 }): Promise<SendEmailResult> {
   if (!isEmailConfigured()) {
     return { ok: false, error: "EMAIL_NOT_CONFIGURED" };
@@ -45,4 +44,30 @@ export async function sendClaimEmail(params: {
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+/**
+ * Sends the approved claim message to the merchant. This is only ever called
+ * after a user has explicitly approved a case (see
+ * app/api/cases/[caseId]/approve/route.ts) — never automatically.
+ *
+ * replyTo is set to the user's own email so any merchant response goes
+ * straight to them, not to Redress.
+ */
+export function sendClaimEmail(params: { to: string; subject: string; body: string; replyTo: string }) {
+  return sendEmail(params);
+}
+
+export function sendPasswordResetEmail(params: { to: string; resetUrl: string }) {
+  return sendEmail({
+    to: params.to,
+    subject: "Reset your Redress password",
+    body: [
+      "We received a request to reset your Redress password.",
+      "",
+      `Reset it here: ${params.resetUrl}`,
+      "",
+      "This link expires in 30 minutes. If you didn't request this, you can safely ignore this email.",
+    ].join("\n"),
+  });
 }

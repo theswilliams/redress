@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { passwordResetRequestSchema } from "@/lib/validation";
 import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { writeAuditLog } from "@/lib/security/audit";
+import { sendPasswordResetEmail } from "@/lib/email/send";
 
 export async function POST(request: Request) {
   const ip = getClientIp(request.headers);
@@ -33,11 +34,27 @@ export async function POST(request: Request) {
 
     await writeAuditLog({ userId: user.id, action: "password_reset.requested", ip });
 
-    // In production this token would be emailed to the user rather than
-    // returned in a dev-only response. No email provider is configured in
-    // this MVP, so we surface the reset link directly for local testing.
+    const resetPath = `/reset-password/confirm?token=${token}`;
+    const resetUrl = new URL(resetPath, request.url).toString();
+
+    const sendResult = await sendPasswordResetEmail({ to: user.email, resetUrl });
+    if (!sendResult.ok) {
+      // Never leak send failures to the client — that could reveal whether
+      // an account exists, or invite retry-spamming. Log it so it's
+      // debuggable, and fall through to the identical generic response.
+      await writeAuditLog({
+        userId: user.id,
+        action: "password_reset.email_failed",
+        ip,
+        metadata: { error: sendResult.error },
+      });
+    }
+
+    // Local dev convenience: also surface the link directly so the flow is
+    // testable without needing a real inbox (real send is still attempted
+    // above, in parallel, whenever RESEND_API_KEY is configured).
     if (process.env.NODE_ENV !== "production") {
-      return NextResponse.json({ ok: true, devResetUrl: `/reset-password/confirm?token=${token}` });
+      return NextResponse.json({ ok: true, devResetUrl: resetPath });
     }
   }
 

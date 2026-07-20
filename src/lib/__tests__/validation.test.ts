@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { signUpSchema, newCaseSchema, approvalDecisionSchema } from "@/lib/validation";
+import { signUpSchema, newCaseSchema, approvalDecisionSchema, recordOutcomeSchema } from "@/lib/validation";
 
 describe("signUpSchema", () => {
   it("accepts a valid signup", () => {
@@ -55,6 +55,28 @@ describe("approvalDecisionSchema", () => {
 
   it("rejects a malformed recipient email", () => {
     const result = approvalDecisionSchema.safeParse({ decision: "approved", recipientEmail: "not-an-email" });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("recordOutcomeSchema", () => {
+  it("accepts a valid outcome", () => {
+    const result = recordOutcomeSchema.safeParse({ outcomeType: "partial_refund", recoveredCents: 2500 });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown outcome type", () => {
+    const result = recordOutcomeSchema.safeParse({ outcomeType: "made_up", recoveredCents: 2500 });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a negative recovered amount", () => {
+    const result = recordOutcomeSchema.safeParse({ outcomeType: "refund", recoveredCents: -100 });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a non-integer recovered amount", () => {
+    const result = recordOutcomeSchema.safeParse({ outcomeType: "refund", recoveredCents: 25.5 });
     expect(result.success).toBe(false);
   });
 });

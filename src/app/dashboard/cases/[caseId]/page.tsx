@@ -2,9 +2,19 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { formatCents, formatDateTime } from "@/lib/format";
-import { CASE_TYPE_LABELS, CERTAINTY_LABELS, type CaseStatus, type CaseType, type CertaintyLevel } from "@/lib/types";
+import {
+  CASE_TYPE_LABELS,
+  CERTAINTY_LABELS,
+  OUTCOME_TYPE_LABELS,
+  RECORDABLE_OUTCOME_STATUSES,
+  type CaseStatus,
+  type CaseType,
+  type CertaintyLevel,
+  type OutcomeType,
+} from "@/lib/types";
 import { StatusBadge } from "@/components/status-badge";
 import { ApprovalPanel } from "./approval-panel";
+import { OutcomePanel } from "./outcome-panel";
 
 export default async function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
   const user = await requireUser();
@@ -69,6 +79,28 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ cas
             pendingCommunication.status === "send_failed" ? pendingCommunication.sendError : null
           }
         />
+      )}
+
+      {RECORDABLE_OUTCOME_STATUSES.includes(caseRecord.status as CaseStatus) && (
+        <OutcomePanel caseId={caseRecord.id} status={caseRecord.status} />
+      )}
+
+      {caseRecord.outcomes.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-semibold">Outcome</h2>
+          <div className="flex flex-col gap-3">
+            {caseRecord.outcomes.map((outcome) => (
+              <div key={outcome.id} className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold">{OUTCOME_TYPE_LABELS[outcome.outcomeType as OutcomeType]}</p>
+                  <p className="font-semibold">{formatCents(outcome.recoveredCents)}</p>
+                </div>
+                {outcome.notes && <p className="mt-1 text-sm text-foreground/80">{outcome.notes}</p>}
+                <p className="mt-1 text-xs text-muted">{formatDateTime(outcome.resolvedAt)}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {caseRecord.policySources.length > 0 && (

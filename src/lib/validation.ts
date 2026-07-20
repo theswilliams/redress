@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PROBLEM_CATEGORIES } from "@/lib/types";
+import { PROBLEM_CATEGORIES, OUTCOME_TYPES } from "@/lib/types";
 
 export const signUpSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
@@ -33,4 +33,14 @@ export const approvalDecisionSchema = z.object({
   // Required when decision === "approved" — validated in the route handler
   // rather than here, since it's conditional on another field.
   recipientEmail: z.string().trim().toLowerCase().email().optional(),
+});
+
+export const recordOutcomeSchema = z.object({
+  outcomeType: z.enum(OUTCOME_TYPES),
+  recoveredCents: z.number().int().min(0).max(100_000_000),
+  notes: z.string().trim().max(2000).optional(),
+});
+
+export const stillWaitingSchema = z.object({
+  note: z.string().trim().max(2000).optional(),
 });
