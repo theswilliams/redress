@@ -8,10 +8,10 @@ const STEPS = [
   },
   {
     title: "AI analyzes your situation",
-    body: "Recoverly reads the document, extracts the key facts, and asks what problem you're trying to solve.",
+    body: "Redress reads the document, extracts the key facts, and asks what problem you're trying to solve.",
   },
   {
-    title: "Recoverly finds possible opportunities",
+    title: "Redress finds possible opportunities",
     body: "A refund, a price adjustment, a billing correction, a cancellation you're owed — with a clear explanation of why.",
   },
   {
@@ -19,7 +19,7 @@ const STEPS = [
     body: "Nothing is sent anywhere until you read the proposed message and explicitly approve it.",
   },
   {
-    title: "Recoverly tracks the outcome",
+    title: "Redress tracks the outcome",
     body: "Every case stays visible on your dashboard, from submitted to resolved.",
   },
 ];
@@ -49,7 +49,7 @@ export default function Home() {
             Your money is hiding in the fine print.
           </h1>
           <p className="max-w-2xl text-lg text-muted sm:text-xl">
-            Upload a receipt, bill, or customer-service problem. Recoverly finds out what you may be entitled to and
+            Upload a receipt, bill, or customer-service problem. Redress finds out what you may be entitled to and
             helps you get it back.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -73,7 +73,7 @@ export default function Home() {
       <section className="border-b border-border bg-card">
         <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
           <p className="text-center text-sm font-medium uppercase tracking-wide text-muted">
-            Recoverly looks for opportunities like
+            Redress looks for opportunities like
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             {OPPORTUNITY_TYPES.map((type) => (
@@ -113,8 +113,8 @@ export default function Home() {
           <div>
             <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">You stay in control</h2>
             <p className="mt-4 text-muted">
-              Recoverly analyzes your documents and drafts recovery requests, but it never contacts a merchant on
-              your behalf without your explicit approval. You always see exactly what Recoverly found, what it
+              Redress analyzes your documents and drafts recovery requests, but it never contacts a merchant on
+              your behalf without your explicit approval. You always see exactly what Redress found, what it
               believes you may be entitled to, and the exact message it wants to send — before anything goes out.
             </p>
           </div>
@@ -126,11 +126,11 @@ export default function Home() {
               },
               {
                 title: "Fact from inference, always labeled",
-                body: "Recoverly never presents a guess as a confirmed fact — every finding shows its confidence level.",
+                body: "Redress never presents a guess as a confirmed fact — every finding shows its confidence level.",
               },
               {
                 title: "Not legal advice",
-                body: "Recoverly gives general information, not legal advice, and never claims to be your attorney.",
+                body: "Redress gives general information, not legal advice, and never claims to be your attorney.",
               },
             ].map((item) => (
               <div key={item.title} className="rounded-xl border border-border bg-card p-5">
@@ -156,7 +156,7 @@ export default function Home() {
 
       <footer className="border-t border-border py-8">
         <div className="mx-auto max-w-6xl px-4 text-center text-sm text-muted sm:px-6">
-          Recoverly provides general information, not legal advice, and takes no external action without your
+          Redress provides general information, not legal advice, and takes no external action without your
           approval.
         </div>
       </footer>

@@ -13,7 +13,7 @@ export type BillingConfig = {
 };
 
 export function getBillingConfig(): BillingConfig {
-  const successFeePercent = Number(process.env.RECOVERLY_SUCCESS_FEE_PERCENT ?? "25");
+  const successFeePercent = Number(process.env.REDRESS_SUCCESS_FEE_PERCENT ?? "25");
 
   return {
     successFeePercent: Number.isFinite(successFeePercent) ? successFeePercent : 25,
@@ -22,7 +22,7 @@ export function getBillingConfig(): BillingConfig {
         label: "Free",
         priceCents: 0,
         interval: null,
-        description: "Analyze unlimited documents. Pay only when Recoverly recovers money for you.",
+        description: "Analyze unlimited documents. Pay only when Redress recovers money for you.",
       },
       pro_monthly: {
         label: "Pro",
@@ -36,5 +36,5 @@ export function getBillingConfig(): BillingConfig {
 
 export function formatSuccessFeeCopy(): string {
   const { successFeePercent } = getBillingConfig();
-  return `No recovery, no success fee. If Recoverly helps you recover money, we charge ${successFeePercent}% of what's recovered — nothing upfront.`;
+  return `No recovery, no success fee. If Redress helps you recover money, we charge ${successFeePercent}% of what's recovered — nothing upfront.`;
 }

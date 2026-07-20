@@ -69,7 +69,7 @@ export function ApprovalPanel({
 
   return (
     <section className="rounded-2xl border border-brand/30 bg-brand-light/40 p-5">
-      <h2 className="text-lg font-semibold text-brand-dark">Review before Recoverly sends this</h2>
+      <h2 className="text-lg font-semibold text-brand-dark">Review before Redress sends this</h2>
       <p className="mt-1 text-sm text-foreground/80">{summary}</p>
 
       <div className="mt-4 rounded-xl border border-border bg-card p-4">
@@ -156,7 +156,7 @@ export function ApprovalPanel({
             rows={3}
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Add any extra context that might help — Recoverly will factor it in."
+            placeholder="Add any extra context that might help — Redress will factor it in."
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-brand"
           />
           <button

@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 
 export type Theme = "light" | "dark" | "system";
 
-const STORAGE_KEY = "recoverly-theme";
+const STORAGE_KEY = "redress-theme";
 
 type ThemeContextValue = {
   theme: Theme;

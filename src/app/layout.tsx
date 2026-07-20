@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Recoverly — Your money is hiding in the fine print",
+  title: "Redress — Your money is hiding in the fine print",
   description:
-    "Upload a receipt, bill, or customer-service problem. Recoverly finds out what you may be entitled to and helps you get it back.",
+    "Upload a receipt, bill, or customer-service problem. Redress finds out what you may be entitled to and helps you get it back.",
 };
 
 export default function RootLayout({

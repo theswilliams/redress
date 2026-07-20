@@ -84,7 +84,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ cas
             ))}
           </div>
           <p className="mt-2 text-xs text-muted">
-            General information based on Recoverly&apos;s knowledge, not verified legal advice or a live check of the
+            General information based on Redress&apos;s knowledge, not verified legal advice or a live check of the
             merchant&apos;s current policy.
           </p>
         </section>

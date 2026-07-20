@@ -190,7 +190,7 @@ export async function runAnalysisPipeline(caseId: string, documentId: string) {
       caseId,
       type: "ai_analysis",
       message: isAiConfigured()
-        ? `Recoverly analyzed your document and found a possible ${opportunity.caseType.replace(/_/g, " ")} opportunity.`
+        ? `Redress analyzed your document and found a possible ${opportunity.caseType.replace(/_/g, " ")} opportunity.`
         : "Analysis ran in demo mode (no GEMINI_API_KEY configured) — connect an API key for real analysis.",
       metadata: JSON.stringify({ opportunity, flagged: draftReview.flagged || researchReview.flagged }),
     },

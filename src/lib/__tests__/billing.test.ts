@@ -2,20 +2,20 @@ import { describe, it, expect, afterEach } from "vitest";
 import { getBillingConfig, formatSuccessFeeCopy } from "@/lib/billing/config";
 
 describe("billing config", () => {
-  const original = process.env.RECOVERLY_SUCCESS_FEE_PERCENT;
+  const original = process.env.REDRESS_SUCCESS_FEE_PERCENT;
 
   afterEach(() => {
-    process.env.RECOVERLY_SUCCESS_FEE_PERCENT = original;
+    process.env.REDRESS_SUCCESS_FEE_PERCENT = original;
   });
 
   it("reads the success fee percent from the environment", () => {
-    process.env.RECOVERLY_SUCCESS_FEE_PERCENT = "30";
+    process.env.REDRESS_SUCCESS_FEE_PERCENT = "30";
     expect(getBillingConfig().successFeePercent).toBe(30);
     expect(formatSuccessFeeCopy()).toContain("30%");
   });
 
   it("falls back to a default when unset or invalid", () => {
-    process.env.RECOVERLY_SUCCESS_FEE_PERCENT = "not-a-number";
+    process.env.REDRESS_SUCCESS_FEE_PERCENT = "not-a-number";
     expect(getBillingConfig().successFeePercent).toBe(25);
   });
 

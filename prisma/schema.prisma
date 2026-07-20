@@ -1,4 +1,4 @@
-// Recoverly database schema.
+// Redress database schema.
 //
 // Enums are modeled as plain strings (with TS union types in src/lib/types.ts)
 // rather than Prisma enums so the schema stays portable between SQLite (local

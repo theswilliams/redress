@@ -54,7 +54,7 @@ export default function UploadPage() {
     <div className="mx-auto flex max-w-2xl flex-col gap-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">What problem are you trying to solve?</h1>
-        <p className="mt-1 text-sm text-muted">Pick the closest match — Recoverly will confirm the details.</p>
+        <p className="mt-1 text-sm text-muted">Pick the closest match — Redress will confirm the details.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-8">

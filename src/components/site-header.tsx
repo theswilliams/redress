@@ -14,7 +14,7 @@ export function SiteHeader() {
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-sm font-bold text-white">
             R
           </span>
-          Recoverly
+          Redress
         </Link>
 
         <nav className="flex items-center gap-3">
