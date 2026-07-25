@@ -8,7 +8,7 @@ import { sendPasswordResetEmail } from "@/lib/email/send";
 
 export async function POST(request: Request) {
   const ip = getClientIp(request.headers);
-  const { allowed } = rateLimit(`reset-request:${ip}`, { limit: 5, windowMs: 60_000 });
+  const { allowed } = await rateLimit(`reset-request:${ip}`, { limit: 5, windowMs: 60_000 });
   if (!allowed) {
     return NextResponse.json({ error: "Too many attempts. Try again shortly." }, { status: 429 });
   }

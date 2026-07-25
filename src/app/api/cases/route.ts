@@ -10,6 +10,12 @@ import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { writeAuditLog } from "@/lib/security/audit";
 import { sniffFileType } from "@/lib/security/fileSignature";
 
+// The AI pipeline runs synchronously inline (see src/lib/jobs/worker.ts) —
+// four sequential model calls can take longer than a typical default.
+// Vercel's Hobby-plan default/max is already 300s with Fluid Compute, so
+// this is mostly documentation, not a fix for an otherwise-broken default.
+export const maxDuration = 60;
+
 export async function GET() {
   const user = await requireUserApi();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,7 +33,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ip = getClientIp(request.headers);
-  const { allowed } = rateLimit(`case-create:${user.id}`, { limit: 10, windowMs: 60_000 });
+  const { allowed } = await rateLimit(`case-create:${user.id}`, { limit: 10, windowMs: 60_000 });
   if (!allowed) {
     return NextResponse.json({ error: "Too many uploads. Try again shortly." }, { status: 429 });
   }

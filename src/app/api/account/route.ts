@@ -14,7 +14,7 @@ export async function DELETE(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ip = getClientIp(request.headers);
-  const { allowed } = rateLimit(`account-delete:${user.id}`, { limit: 5, windowMs: 60_000 });
+  const { allowed } = await rateLimit(`account-delete:${user.id}`, { limit: 5, windowMs: 60_000 });
   if (!allowed) {
     return NextResponse.json({ error: "Too many attempts. Try again shortly." }, { status: 429 });
   }

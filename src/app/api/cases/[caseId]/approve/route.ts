@@ -14,7 +14,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
   const { caseId } = await params;
   const ip = getClientIp(request.headers);
 
-  const { allowed } = rateLimit(`approve:${user.id}`, { limit: 10, windowMs: 60_000 });
+  const { allowed } = await rateLimit(`approve:${user.id}`, { limit: 10, windowMs: 60_000 });
   if (!allowed) {
     return NextResponse.json({ error: "Too many attempts. Try again shortly." }, { status: 429 });
   }

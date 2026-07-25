@@ -8,6 +8,10 @@ import { processQueuedJobs } from "@/lib/jobs/worker";
 
 const noteSchema = z.object({ note: z.string().trim().min(1).max(2000) });
 
+// May re-run the full AI pipeline synchronously — see the comment in
+// app/api/cases/route.ts.
+export const maxDuration = 60;
+
 // Statuses where the note is genuinely new information Redress hasn't
 // reasoned about yet, so it's worth spending an AI call to reconsider.
 const RERUNNABLE_STATUSES = ["ready_for_review", "information_needed", "additional_information_requested"];
@@ -19,7 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
   const { caseId } = await params;
   const ip = getClientIp(request.headers);
 
-  const { allowed } = rateLimit(`notes:${user.id}`, { limit: 10, windowMs: 60_000 });
+  const { allowed } = await rateLimit(`notes:${user.id}`, { limit: 10, windowMs: 60_000 });
   if (!allowed) {
     return NextResponse.json({ error: "Too many attempts. Try again shortly." }, { status: 429 });
   }

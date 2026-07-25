@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const ip = getClientIp(request.headers);
-  const { allowed } = rateLimit(`verify-resend:${user.id}`, { limit: 3, windowMs: 60_000 });
+  const { allowed } = await rateLimit(`verify-resend:${user.id}`, { limit: 3, windowMs: 60_000 });
   if (!allowed) {
     return NextResponse.json({ error: "Too many attempts. Try again shortly." }, { status: 429 });
   }

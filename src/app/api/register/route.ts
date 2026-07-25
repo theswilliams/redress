@@ -8,7 +8,7 @@ import { issueEmailVerification } from "@/lib/emailVerification";
 
 export async function POST(request: Request) {
   const ip = getClientIp(request.headers);
-  const { allowed } = rateLimit(`register:${ip}`, { limit: 5, windowMs: 60_000 });
+  const { allowed } = await rateLimit(`register:${ip}`, { limit: 5, windowMs: 60_000 });
   if (!allowed) {
     return NextResponse.json({ error: "Too many attempts. Try again shortly." }, { status: 429 });
   }
