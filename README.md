@@ -1,6 +1,19 @@
 # Redress
 
-AI-powered consumer advocacy platform. Upload a receipt, bill, or customer-service problem — Redress figures out what you may be entitled to and helps you get it back, with you approving every external action.
+AI-powered consumer advocacy platform. Upload a receipt, bill, or customer-service problem — Redress figures out what you may be entitled to (a refund, a price adjustment, compensation, a cancellation) and drafts the message to get it back, with a human approving every external action before anything is sent.
+
+**[Live demo →](https://redress-weld.vercel.app)** — sign in with `demo@redress.app` / `RedressDemo2026!` to see a pre-populated account with a full case lifecycle (a resolved claim, one awaiting a merchant's response, one waiting on your approval, and one that honestly didn't pan out). No signup or AI-provider key needed to look around.
+
+### Why this project
+
+Most "AI wrapper" demos stop at "upload a document, get a summary." The interesting engineering problem here was different: **how do you let an LLM take real-world action on a user's behalf — sending an email that goes to a real merchant — without it ever being able to do something the user didn't actually agree to?** That constraint shaped most of the architecture:
+
+- A **hard approval gate** enforced in the API layer, not by prompting the model to be careful (`app/api/cases/[caseId]/approve/route.ts`) — no `Communication` row can move from `draft` to `sent` without a corresponding `UserApproval` record with `decision: "approved"`, and the recipient email is always typed in by the user, never inferred by the AI.
+- **Prompt-injection awareness**: every uploaded document is untrusted input that gets read by an LLM. Agent system prompts explicitly instruct the model to treat document content as data rather than instructions, and — because the approval gate above doesn't depend on the model behaving — that holds even if a malicious document tried to override it.
+- **Calibrated confidence, not fabricated certainty**: extracted facts carry a `confidence`/`uncertain` flag, and policy claims carry an explicit certainty level (`confirmed_policy` vs. `likely_possibility` vs. `unknown`) that's surfaced in the UI rather than smoothed over. The seeded demo includes a case where the AI is honest that it can't verify a claim and it gets rejected — that was a deliberate choice, not a bug.
+- A **four-agent pipeline** (document analysis → opportunity detection → policy research → claim drafting) with each stage's input/output persisted (`AIAnalysis`) for auditability, backed by a DB-backed job queue with an explicit seam to swap in a real queue (BullMQ/SQS) later.
+
+See [Architecture notes](#architecture-notes) below for more, and [`scripts/seed-demo.ts`](scripts/seed-demo.ts) for how the demo account's data was built (directly against Prisma/Blob, not through the UI, so it doesn't need a live AI call to look real).
 
 ## Stack
 
@@ -36,6 +49,16 @@ Fill in `BLOB_READ_WRITE_TOKEN` to store uploads in Vercel Blob. Without it, upl
 ```bash
 npm test
 ```
+
+## Demo data
+
+[`scripts/seed-demo.ts`](scripts/seed-demo.ts) creates (or resets) a `demo@redress.app` account with four cases spanning the full lifecycle — resolved, awaiting a merchant's response, waiting on your approval, and one honestly-rejected claim — including real generated PDF "receipts" uploaded to Blob storage, so the "view document" links work. It writes straight to Prisma/Blob, bypassing the app's HTTP routes entirely, and is idempotent (safe to re-run).
+
+```bash
+npx tsx scripts/seed-demo.ts
+```
+
+Requires `DATABASE_URL` (and `BLOB_READ_WRITE_TOKEN`, so uploaded documents are viewable) in the environment.
 
 ## Deployment
 
