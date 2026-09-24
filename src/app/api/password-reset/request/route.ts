@@ -5,6 +5,7 @@ import { passwordResetRequestSchema } from "@/lib/validation";
 import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { writeAuditLog } from "@/lib/security/audit";
 import { sendPasswordResetEmail } from "@/lib/email/send";
+import { isDemoEmail } from "@/lib/demo";
 
 export async function POST(request: Request) {
   const ip = getClientIp(request.headers);
@@ -21,8 +22,9 @@ export async function POST(request: Request) {
 
   const user = await db.user.findUnique({ where: { email: parsed.data.email } });
 
-  // Always respond the same way whether or not the account exists.
-  if (user) {
+  // Always respond the same way whether or not the account exists (the shared
+  // demo account is silently skipped so its password can't be reset).
+  if (user && !isDemoEmail(user.email)) {
     const token = randomBytes(32).toString("hex");
     await db.passwordResetToken.create({
       data: {

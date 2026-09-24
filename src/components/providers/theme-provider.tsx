@@ -29,6 +29,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const stored = (localStorage.getItem(STORAGE_KEY) as Theme | null) ?? "system";
+    // Reading localStorage must happen after mount (not during render) to avoid a hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setThemeState(stored);
     const resolved = stored === "system" ? getSystemTheme() : stored;
     setResolvedTheme(resolved);

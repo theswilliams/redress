@@ -9,7 +9,6 @@ import { PrismaClient } from "@/generated/prisma/client";
 neonConfig.webSocketConstructor = ws;
 
 declare global {
-  // eslint-disable-next-line no-var
   var __prisma: PrismaClient | undefined;
 }
 

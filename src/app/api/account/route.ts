@@ -6,6 +6,7 @@ import { requireUserApi } from "@/lib/session";
 import { deleteAllUploadsForUser } from "@/lib/storage";
 import { writeAuditLog } from "@/lib/security/audit";
 import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
+import { isDemoEmail } from "@/lib/demo";
 
 const deleteAccountSchema = z.object({ password: z.string().min(1) });
 
@@ -17,6 +18,10 @@ export async function DELETE(request: Request) {
   const { allowed } = await rateLimit(`account-delete:${user.id}`, { limit: 5, windowMs: 60_000 });
   if (!allowed) {
     return NextResponse.json({ error: "Too many attempts. Try again shortly." }, { status: 429 });
+  }
+
+  if (isDemoEmail(user.email)) {
+    return NextResponse.json({ error: "The shared demo account can't be deleted." }, { status: 403 });
   }
 
   const parsed = deleteAccountSchema.safeParse(await request.json().catch(() => null));

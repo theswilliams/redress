@@ -5,7 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export function SiteHeader() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">

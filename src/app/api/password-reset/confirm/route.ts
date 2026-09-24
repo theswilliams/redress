@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { passwordResetConfirmSchema } from "@/lib/validation";
 import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { writeAuditLog } from "@/lib/security/audit";
+import { isDemoEmail } from "@/lib/demo";
 
 export async function POST(request: Request) {
   const ip = getClientIp(request.headers);
@@ -20,6 +21,11 @@ export async function POST(request: Request) {
 
   const record = await db.passwordResetToken.findUnique({ where: { token: parsed.data.token } });
   if (!record || record.usedAt || record.expiresAt < new Date()) {
+    return NextResponse.json({ error: "This reset link is invalid or has expired." }, { status: 400 });
+  }
+
+  const target = await db.user.findUnique({ where: { id: record.userId }, select: { email: true } });
+  if (isDemoEmail(target?.email)) {
     return NextResponse.json({ error: "This reset link is invalid or has expired." }, { status: 400 });
   }
 

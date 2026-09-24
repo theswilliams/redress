@@ -49,3 +49,6 @@ next-env.d.ts
 
 # uploaded documents (local object storage stand-in)
 /storage/uploads
+
+# local preview config
+.claude/launch.json

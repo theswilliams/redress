@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUserApi } from "@/lib/session";
-import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
+import { rateLimit } from "@/lib/security/rateLimit";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { processQueuedJobs } from "@/lib/jobs/worker";
 
@@ -21,7 +21,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { caseId } = await params;
-  const ip = getClientIp(request.headers);
 
   const { allowed } = await rateLimit(`notes:${user.id}`, { limit: 10, windowMs: 60_000 });
   if (!allowed) {

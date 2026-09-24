@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { formatCents, formatDate } from "@/lib/format";
-import { CASE_STATUS_LABELS, CASE_TYPE_LABELS, type CaseStatus, type CaseType } from "@/lib/types";
+import { CASE_TYPE_LABELS, type CaseStatus, type CaseType } from "@/lib/types";
 import { StatusBadge } from "@/components/status-badge";
 
 export default async function CasesPage() {

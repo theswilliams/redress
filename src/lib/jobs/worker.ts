@@ -3,10 +3,12 @@ import { runAnalysisPipeline } from "@/lib/ai/pipeline";
 
 /**
  * Processes queued jobs. Each job is a durable DB row (see prisma/schema.prisma
- * `Job` model), so a crash mid-run leaves a `running` job that a retry pass
- * can pick back up — this is the seam to swap in a real queue (BullMQ/SQS/etc)
- * without changing callers, which only ever call `enqueueJob` + this
- * function.
+ * `Job` model), which gives a record of every run and its outcome. It is called
+ * inline from the request that enqueued the job, and there is NO automatic
+ * retry: a failed job stays `failed` (and a job left `running` by a crash is
+ * not picked up again); the user can trigger a fresh analysis by adding more
+ * information. Callers only use `enqueueJob` + this function, so it is the seam
+ * to swap in a real queue (BullMQ/SQS/etc) with retries and backoff.
  */
 export async function processQueuedJobs(limit = 5) {
   const jobs = await db.job.findMany({
@@ -16,7 +18,12 @@ export async function processQueuedJobs(limit = 5) {
   });
 
   for (const job of jobs) {
-    await db.job.update({ where: { id: job.id }, data: { status: "running", startedAt: new Date(), attempts: { increment: 1 } } });
+    // Atomic claim: only one caller can move a given job from queued to running.
+    const claimed = await db.job.updateMany({
+      where: { id: job.id, status: "queued" },
+      data: { status: "running", startedAt: new Date(), attempts: { increment: 1 } },
+    });
+    if (claimed.count === 0) continue;
 
     try {
       if (job.type === "analyze_document") {
@@ -39,7 +46,7 @@ export async function processQueuedJobs(limit = 5) {
           data: {
             caseId: job.caseId,
             type: "system",
-            message: "Analysis failed. Our team will look into it — you can also add more information and we'll retry.",
+            message: "Analysis failed. You can add more information to try again.",
           },
         });
         await db.case.update({ where: { id: job.caseId }, data: { status: "information_needed" } });

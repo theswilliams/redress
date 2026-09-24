@@ -108,7 +108,7 @@ export function ApprovalPanel({
       {!editing && (
         <div className="mt-4">
           <label htmlFor="recipientEmail" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">
-            Send to (merchant's contact email)
+            Send to (merchant&apos;s contact email)
           </label>
           <input
             id="recipientEmail"

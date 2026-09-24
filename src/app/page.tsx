@@ -92,7 +92,7 @@ export default function Home() {
       <section id="how-it-works" className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
         <div className="mb-12 text-center">
           <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">How it works</h2>
-          <p className="mt-3 text-muted">Five steps from "I think I got ripped off" to money back in your account.</p>
+          <p className="mt-3 text-muted">Five steps from &quot;I think I got ripped off&quot; to money back in your account.</p>
         </div>
         <ol className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
           {STEPS.map((step, i) => (

@@ -1,88 +1,77 @@
 # Redress
 
-AI-powered consumer advocacy platform. Upload a receipt, bill, or customer-service problem — Redress figures out what you may be entitled to (a refund, a price adjustment, compensation, a cancellation) and drafts the message to get it back, with a human approving every external action before anything is sent.
+An AI-assisted workflow for turning a receipt, bill or customer-service problem into a drafted claim message, where **nothing is sent unless the user explicitly approves it**, and that rule is enforced by the API, not by the prompt.
 
-**[Live demo →](https://redress-weld.vercel.app)** — sign in with `demo@redress.app` / `RedressDemo2026!` to see a pre-populated account with a full case lifecycle (a resolved claim, one awaiting a merchant's response, one waiting on your approval, and one that honestly didn't pan out). No signup or AI-provider key needed to look around.
+**Live demo:** https://redress-weld.vercel.app: sign in with `demo@redress.app` / `RedressDemo2026!` (a shared public demo account with sample cases; it cannot be deleted or have its password changed)
 
-### Why this project
+> Portfolio project. No real users. AI features use Google Gemini; without an API key the app runs in a clearly labelled demo mode.
 
-Most "AI wrapper" demos stop at "upload a document, get a summary." The interesting engineering problem here was different: **how do you let an LLM take real-world action on a user's behalf — sending an email that goes to a real merchant — without it ever being able to do something the user didn't actually agree to?** That constraint shaped most of the architecture:
+<!-- TODO: Add screenshots: case list, analysis result with confidence labels, approval panel. -->
 
-- A **hard approval gate** enforced in the API layer, not by prompting the model to be careful (`app/api/cases/[caseId]/approve/route.ts`) — no `Communication` row can move from `draft` to `sent` without a corresponding `UserApproval` record with `decision: "approved"`, and the recipient email is always typed in by the user, never inferred by the AI.
-- **Prompt-injection awareness**: every uploaded document is untrusted input that gets read by an LLM. Agent system prompts explicitly instruct the model to treat document content as data rather than instructions, and — because the approval gate above doesn't depend on the model behaving — that holds even if a malicious document tried to override it.
-- **Calibrated confidence, not fabricated certainty**: extracted facts carry a `confidence`/`uncertain` flag, and policy claims carry an explicit certainty level (`confirmed_policy` vs. `likely_possibility` vs. `unknown`) that's surfaced in the UI rather than smoothed over. The seeded demo includes a case where the AI is honest that it can't verify a claim and it gets rejected — that was a deliberate choice, not a bug.
-- A **four-agent pipeline** (document analysis → opportunity detection → policy research → claim drafting) with each stage's input/output persisted (`AIAnalysis`) for auditability, backed by a DB-backed job queue with an explicit seam to swap in a real queue (BullMQ/SQS) later.
+## Overview
+A user uploads a document and describes the problem. A four-stage pipeline extracts the facts, identifies what they might be entitled to, researches the merchant's likely policy, and drafts a message. The user reviews and edits the draft, enters the merchant's email address, and approves. Only then does the system send it, and it tracks the outcome.
 
-See [Architecture notes](#architecture-notes) below for more, and [`scripts/seed-demo.ts`](scripts/seed-demo.ts) for how the demo account's data was built (directly against Prisma/Blob, not through the UI, so it doesn't need a live AI call to look real).
+## Why I Built It
+*[Edit in your own words. Suggested:]* Most AI demos end at "upload a file, get a summary." I wanted to work on the harder part: letting a model contribute to a real-world action (an email to a third party) while guaranteeing it can't act without the user's consent, and being honest about what the model does and doesn't know.
 
-## Stack
+## Key Features
+- Document upload (PDF/PNG/JPEG/WebP) with **byte-level file-type verification**.
+- **Four-stage AI pipeline:** document analysis → opportunity detection → policy research → claim drafting. Each stage's input and output is stored for traceability.
+- **Confidence labels:** extracted fields carry confidence/uncertain flags; research findings carry a certainty level (`confirmed_policy`, `likely_possibility`, `user_specific_assumption`, `unknown`), shown in the UI.
+- **Human approval:** edit the draft, supply the recipient address yourself, approve or edit. Failed sends leave the approval pending with the error shown.
+- **Re-analysis:** add more information and the pipeline re-runs; any older pending approval is superseded so a stale draft can't be sent.
+- Outcome tracking (resolved/rejected, recovered amount), dashboard stats, case timeline.
+- Accounts: register, sign in, password reset by email, email verification (tracked, not enforced), account deletion, audit log.
 
-- Next.js 16 (App Router) + TypeScript + Tailwind
-- Prisma 7 on PostgreSQL via `@prisma/adapter-neon` (Vercel Postgres / Neon)
-- Auth.js (NextAuth v5) credentials provider, bcrypt password hashing, JWT sessions
-- Google Gemini API for the AI agent pipeline (document analysis, opportunity detection, policy research, claim drafting)
-- Resend for sending approved claim emails
-- Vercel Blob for uploaded document storage (`src/lib/storage.ts`), with a local-filesystem fallback for local dev only
-- DB-backed job queue (`Job` model) for the analysis pipeline — swappable for a real queue (BullMQ/SQS/etc)
-- Vitest for unit tests
+## Architecture
+```
+Browser ─► Next.js 16 (App Router pages + API routes)
+              │
+              ├─ Auth.js (credentials, bcrypt, JWT sessions)
+              ├─ Prisma 7 ─► Postgres (Neon)   [cases, documents, AIAnalysis, Communication,
+              │                                  UserApproval, Job, AuditLog, …]
+              ├─ Upload ─► Vercel Blob (local disk in dev)
+              ├─ Job row created ─► worker runs pipeline (inline, in-request today)
+              │       └─ Gemini (JSON-schema output) ─► Zod validation ─► safety layer
+              ├─ Draft saved as Communication(status = "draft") + UserApproval(pending)
+              └─ POST /approve  ─► checks session, ownership, rate limit, placeholders,
+                                    user-typed recipient ─► Resend ─► status "sent"
+```
 
-## Getting started
+## Technical Highlights
+- **Approval gate in the data layer:** a `Communication` only moves from `draft` to `sent` in `approve/route.ts`, which requires a pending `UserApproval`, a session that owns the case, and a recipient typed by the user. The pipeline itself can never create a sent message.
+- **Prompt-injection awareness:** uploaded documents are treated as untrusted data in every agent prompt, and because the gate doesn't depend on model behaviour, a hostile document still can't trigger a send.
+- **Structured, validated model output:** Gemini is called with a JSON schema, then parsed with Zod; invalid output fails loudly.
+- **Draft safety screen:** deterministic checks flag threats, legal claims and "guarantee" language, and unfilled `[INSERT …]` placeholders block approval. (A guardrail, not a filter: rule-based and bypassable.)
+- **Rate limiting** (Upstash Redis with an in-memory fallback for local dev) on sign-in (per IP, and per account), registration, password reset, case creation, approval, notes and outcome routes.
+- **Shared demo account protected:** deletion and password reset are refused for it, since its credentials are public.
+- **Upload validation** by magic bytes, not client MIME type.
+- **Auditability:** every agent call is stored; security-relevant actions write an audit log.
+- Demo seed script writes straight to the database so the demo needs no live AI calls.
 
-1. Copy `.env.example` to `.env`.
-2. Set `DATABASE_URL` to a real Postgres connection string — see [Deployment](#deployment) below for how to get one. The app cannot start without this; there is no SQLite fallback.
-3. Fill in `AUTH_SECRET` (`npx auth secret` or `openssl rand -base64 32`).
+## Testing
+`npm test`: **55 Vitest tests in 7 files**. Last run: 55 passed. They cover billing config, file-signature sniffing, rate limiting, the safety layer and validation schemas, plus route-level tests of the **approval gate** (unauthenticated, rate-limited, someone else's case, nothing pending, missing recipient, unfilled placeholder, successful send to the user-typed address, provider failure keeps the approval pending, edit and reject never send), demo-account protection, and the job worker's claim/failure handling. `npm run lint` and `tsc --noEmit` are clean, and GitHub Actions runs lint, type-check, tests and a Gitleaks secret scan.
+Not covered: the AI pipeline itself (no live model calls in tests), authentication end to end, and the UI. Database, session, email and rate-limit dependencies are mocked in the route tests.
 
+## Tech Stack
+Next.js 16, React 19, TypeScript, Tailwind CSS 4, Prisma 7 + PostgreSQL (Neon), Auth.js (NextAuth v5), bcryptjs, Zod, Google Gemini (`@google/genai`), Resend, Vercel Blob, Upstash Redis rate limiting, Vitest, ESLint, GitHub Actions, Vercel.
+
+## Demo
+Live: https://redress-weld.vercel.app: shared demo account `demo@redress.app` / `RedressDemo2026!`. Re-run `npx tsx scripts/seed-demo.ts` to reset its data. Four seeded cases show each stage of the lifecycle, including one claim the AI honestly couldn't support.
+Run locally: copy `.env.example` to `.env`, set `DATABASE_URL` (Postgres) and `AUTH_SECRET`, then:
 ```bash
 npm install
-npx prisma migrate dev --name init   # applies the schema to your Postgres database
+npx prisma migrate dev
 npm run dev
-```
-
-Fill in `GEMINI_API_KEY` to enable real AI analysis (free tier, no card required — get one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)). Without a key, the app runs in **demo mode**: uploads and the full case workflow still work, but every AI agent returns a clearly-labeled placeholder instead of a real analysis.
-
-Fill in `RESEND_API_KEY` to enable real email delivery (free tier, no card required — get one at [resend.com/api-keys](https://resend.com/api-keys)). Without a key, an approved submission is simulated (clearly labeled as such) instead of actually sent. Note: until you [verify a custom domain](https://resend.com/docs/dashboard/domains/introduction) with Resend and set `EMAIL_FROM` to an address on it, the default sandbox sender can only deliver to the email address of the Resend account owner — not to arbitrary merchants.
-
-Fill in `BLOB_READ_WRITE_TOKEN` to store uploads in Vercel Blob. Without it, uploads fall back to the local filesystem — fine for local dev, but this fallback does **not** work when deployed to Vercel (serverless functions have a read-only filesystem outside `/tmp`, which is wiped between invocations).
-
-## Tests
-
-```bash
 npm test
 ```
+Set `GEMINI_API_KEY` for real analysis (otherwise demo mode) and `RESEND_API_KEY` for real email (otherwise sends are simulated and labelled).
 
-## Demo data
+## Current Status
+Working personal portfolio project. Known limitations, stated plainly:
+- The analysis job runs **inline in the request** (claimed atomically); failed jobs are marked failed and are **not retried automatically**. The user can re-run analysis by adding more information.
+- Virus scanning is a placeholder; email verification is tracked but not enforced; billing is configuration only (no payment processing).
+- Gemini only. Not evaluated for accuracy on real-world documents.
 
-[`scripts/seed-demo.ts`](scripts/seed-demo.ts) creates (or resets) a `demo@redress.app` account with four cases spanning the full lifecycle — resolved, awaiting a merchant's response, waiting on your approval, and one honestly-rejected claim — including real generated PDF "receipts" uploaded to Blob storage, so the "view document" links work. It writes straight to Prisma/Blob, bypassing the app's HTTP routes entirely, and is idempotent (safe to re-run).
-
-```bash
-npx tsx scripts/seed-demo.ts
-```
-
-Requires `DATABASE_URL` (and `BLOB_READ_WRITE_TOKEN`, so uploaded documents are viewable) in the environment.
-
-## Deployment
-
-Target stack: **Vercel** (hosting) + **Vercel Postgres** (Neon-backed) + **Vercel Blob** (file storage) — all three are provisioned from the same Vercel project, no separate accounts needed beyond Vercel itself.
-
-1. **Create a Vercel account** and connect it to the GitHub account hosting this repo.
-2. **Import the project**: Vercel dashboard → Add New → Project → select this repo. Don't deploy yet — add storage first so the env vars exist for the first build.
-3. **Add Postgres**: Project → Storage tab → Create Database → Postgres. This auto-injects `DATABASE_URL` (and a few Prisma-specific variants) into the project's environment variables for all environments (production/preview/development).
-4. **Add Blob storage**: Project → Storage tab → Create → Blob. This auto-injects `BLOB_READ_WRITE_TOKEN`.
-5. **Add the remaining secrets manually** in Project → Settings → Environment Variables: `AUTH_SECRET`, `GEMINI_API_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, `REDRESS_SUCCESS_FEE_PERCENT`.
-6. **Deploy**. The build script (`prisma migrate deploy && next build`) applies any pending migrations against the production database automatically before building — no separate migration step needed.
-7. For local dev against the same database, copy the `DATABASE_URL` Vercel generated into your local `.env` (or create a separate Neon branch for dev via the Neon dashboard, linked from the Vercel Storage tab, so local work doesn't touch production data).
-
-There is currently no `vercel.json` — none of the above requires one; it's all zero-config for a standard Next.js app.
-
-## Architecture notes
-
-- **Human approval gate**: no external communication is ever created with a status other than `draft`. Sending only happens after an explicit `UserApproval` record with `decision: "approved"` — enforced in `app/api/cases/[caseId]/approve/route.ts`, not by the AI.
-- **Prompt-injection defense**: uploaded documents are untrusted input. Every agent's system prompt (`src/lib/ai/prompts.ts`) instructs the model to treat document content as data, never instructions — and the approval gate above means this holds even if that instruction were ignored.
-- **Fact vs. inference**: extracted fields carry a `confidence` and `uncertain` flag; policy research findings carry an explicit `certainty` level (`confirmed_policy` / `likely_possibility` / `user_specific_assumption` / `unknown`). The UI surfaces these distinctions rather than presenting everything as fact.
-- **Billing**: the success-fee percentage and plan list are config-driven (`src/lib/billing/config.ts`, `REDRESS_SUCCESS_FEE_PERCENT` env var), not hard-coded, so the business model can change without a schema rewrite.
-- **Email delivery**: sending is real (via Resend, `src/lib/email/send.ts`) once `RESEND_API_KEY` is configured — otherwise it falls back to a clearly-labeled simulated send. The recipient address is always supplied by the user in the approval UI; Redress never guesses or fabricates a merchant's contact email. If a send fails (bad address, provider error), the approval stays pending and the error is surfaced so the user can fix it and retry — nothing is silently marked as sent. The same sender also delivers password-reset emails (`sendPasswordResetEmail`); send failures there are logged but never surfaced to the client, so as not to leak account existence.
-- **Outcome tracking**: `app/api/cases/[caseId]/outcome/route.ts` is how a case actually gets marked resolved/rejected and its recovered amount recorded (`RecoveryOutcome`), driving the dashboard's "Total recovered" and success-rate stats. Only reachable once a case has actually been submitted (`submitted` / `awaiting_response` / `additional_information_requested`) — there's no way to record an outcome before something was sent.
-- **Re-analysis loop**: "Add More Information" (`app/api/cases/[caseId]/notes/route.ts`) doesn't just log a comment — it folds the note into the case context and re-runs the full AI pipeline. Any prior pending approval is automatically marked superseded (`runAnalysisPipeline` in `src/lib/ai/pipeline.ts`) so a user can never approve a stale draft that doesn't reflect what they just added.
-- **Upload validation**: file type is verified against the actual bytes (`src/lib/security/fileSignature.ts`), not the client-declared MIME type, which is trivially spoofable. Real antivirus scanning (ClamAV/VirusTotal) is a further integration seam, not yet wired up — `Document.scanStatus` is currently always `"clean"`.
-- **Email verification**: signup sends a verification email (Resend); unverified accounts see a dismissible-until-verified banner with a resend option, but nothing is currently gated behind verification — it's tracked, not yet enforced.
-- **Account deletion**: `DELETE /api/account` (password-confirmed) cascades through every owned record via Prisma's `onDelete: Cascade` and also deletes the user's uploaded files from disk. `AuditLog` rows survive with `userId` set to null, preserving that an account was deleted without keeping personal data.
+## Future Development
+Provider abstraction (add Claude/OpenAI), a real queue with retry/backoff, tests for the AI pipeline, scheduled demo-data reset, antivirus scanning, and an accuracy evaluation set.

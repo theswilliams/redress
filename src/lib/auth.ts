@@ -2,6 +2,8 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
+import { isDemoEmail } from "@/lib/demo";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
@@ -15,15 +17,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      authorize: async (credentials) => {
+      authorize: async (credentials, request) => {
         const email = credentials?.email;
         const password = credentials?.password;
         if (typeof email !== "string" || typeof password !== "string") {
           return null;
         }
 
+        const normalizedEmail = email.toLowerCase().trim();
+
+        // Throttle password guessing: per IP always, and per account except for
+        // the shared demo account (many visitors legitimately share it).
+        const ip = request ? getClientIp(request.headers) : "unknown";
+        const ipLimit = await rateLimit(`login-ip:${ip}`, { limit: 20, windowMs: 15 * 60_000 });
+        if (!ipLimit.allowed) return null;
+        if (!isDemoEmail(normalizedEmail)) {
+          const acctLimit = await rateLimit(`login:${normalizedEmail}`, { limit: 10, windowMs: 15 * 60_000 });
+          if (!acctLimit.allowed) return null;
+        }
+
         const user = await db.user.findUnique({
-          where: { email: email.toLowerCase().trim() },
+          where: { email: normalizedEmail },
         });
         if (!user) return null;
 
