@@ -46,6 +46,7 @@ Browser ─► Next.js 16 (App Router pages + API routes)
 - **Draft safety screen:** deterministic checks flag threats, legal claims and "guarantee" language, and unfilled `[INSERT …]` placeholders block approval. (A guardrail, not a filter: rule-based and bypassable.)
 - **Ownership on every route:** cases, documents, approvals and notes are looked up and checked against the signed-in user (a uniform 404 for someone else's record); regression tests cover each route. Document downloads are served with `nosniff` and a sandboxing CSP, and internal storage keys are never returned by the API.
 - **Verified email before real sends:** when a real email provider is configured, the approval route refuses to send from an unverified account, because the message carries the user's address as Reply-To.
+- **Baseline security headers** on every route, including `X-Frame-Options: DENY` so the approve/send buttons can't be clickjacked.
 - **Emailed links** (password reset, verification) use a configured base URL (`APP_URL` / Vercel production URL), never the request's Host header.
 - **Rate limiting** (Upstash Redis with an in-memory fallback for local dev) on sign-in (per IP, and per account), registration, password reset, case creation, approval, notes and outcome routes.
 - **Shared demo account protected:** deletion and password reset are refused for it, since its credentials are public.
@@ -54,7 +55,7 @@ Browser ─► Next.js 16 (App Router pages + API routes)
 - Demo seed script writes straight to the database so the demo needs no live AI calls.
 
 ## Testing
-`npm test`: **82 Vitest tests in 9 files**. Last run: 82 passed. They cover billing config, file-signature sniffing, rate limiting, the safety layer and validation schemas, plus route-level tests of the **approval gate** (unauthenticated, rate-limited, someone else's case, nothing pending, missing recipient, unfilled placeholder, successful send to the user-typed address, provider failure keeps the approval pending, edit and reject never send), demo-account protection, and the job worker's claim/failure handling. `npm run lint` and `tsc --noEmit` are clean, and GitHub Actions runs lint, type-check, tests and a Gitleaks secret scan.
+`npm test`: **84 Vitest tests in 10 files**. Last run: 84 passed. They cover billing config, file-signature sniffing, rate limiting, the safety layer and validation schemas, plus route-level tests of the **approval gate** (unauthenticated, rate-limited, someone else's case, nothing pending, missing recipient, unfilled placeholder, successful send to the user-typed address, provider failure keeps the approval pending, edit and reject never send), demo-account protection, and the job worker's claim/failure handling. `npm run lint` and `tsc --noEmit` are clean, and GitHub Actions runs lint, type-check, tests and a Gitleaks secret scan.
 Also covered: ownership (IDOR) checks on the document, case, notes and outcome routes, the upload's honest `validated` status, storage-path containment, the emailed-link base URL, and job scoping (a request only runs its own case's job). Not covered: the AI pipeline itself (no live model calls in tests), authentication end to end, and the UI. Database, session, email and rate-limit dependencies are mocked in the route tests.
 
 ## Tech Stack
