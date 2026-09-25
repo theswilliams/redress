@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   rateLimit: vi.fn(),
   readUpload: vi.fn(),
   saveUpload: vi.fn(),
+  deleteUpload: vi.fn(),
   enqueueJob: vi.fn(),
   runCaseJobsInline: vi.fn(),
   writeAuditLog: vi.fn(),
@@ -24,7 +25,7 @@ vi.mock("@/lib/db", () => ({ db: mocks.db }));
 vi.mock("@/lib/session", () => ({ requireUserApi: mocks.requireUserApi }));
 vi.mock("@/lib/security/rateLimit", () => ({ rateLimit: mocks.rateLimit, getClientIp: () => "127.0.0.1" }));
 vi.mock("@/lib/security/audit", () => ({ writeAuditLog: mocks.writeAuditLog }));
-vi.mock("@/lib/storage", () => ({ readUpload: mocks.readUpload, saveUpload: mocks.saveUpload }));
+vi.mock("@/lib/storage", () => ({ readUpload: mocks.readUpload, saveUpload: mocks.saveUpload, deleteUpload: mocks.deleteUpload }));
 vi.mock("@/lib/jobs/queue", () => ({ enqueueJob: mocks.enqueueJob, runCaseJobsInline: mocks.runCaseJobsInline }));
 
 import { GET as getDocument } from "@/app/api/documents/[documentId]/route";
@@ -155,22 +156,23 @@ describe("POST /api/cases (upload)", () => {
   };
 
   beforeEach(() => {
-    mocks.db.case.create.mockResolvedValue({ id: "case-new" });
+    mocks.db.case.create.mockResolvedValue({ id: "case-new", documents: [{ id: "doc-new" }] });
     mocks.saveUpload.mockResolvedValue({ storageKey: "user-me/k-receipt.pdf", sha256: "abc", sizeBytes: 20 });
-    mocks.db.document.create.mockResolvedValue({ id: "doc-new" });
   });
 
   it("records an uploaded file as 'validated', never as clean/scanned (no scanner exists)", async () => {
     const res = await createCase(upload(Buffer.from("%PDF-1.7 fake pdf content")));
     expect(res.status).toBeLessThan(300);
-    const data = mocks.db.document.create.mock.calls[0][0].data;
+    const data = mocks.db.case.create.mock.calls[0][0].data.documents.create;
     expect(data.securityStatus).toBe("validated");
     expect(JSON.stringify(data)).not.toMatch(/clean|scanned/i);
   });
 
   it("runs the analysis job inline and scoped to the new case", async () => {
     await createCase(upload(Buffer.from("%PDF-1.7 fake pdf content")));
-    expect(mocks.enqueueJob).toHaveBeenCalledWith(expect.objectContaining({ caseId: "case-new", type: "analyze_document" }));
+    expect(mocks.enqueueJob).toHaveBeenCalledWith(
+      expect.objectContaining({ caseId: "case-new", type: "analyze_document", payload: { documentId: "doc-new" } }),
+    );
     expect(mocks.runCaseJobsInline).toHaveBeenCalledWith("case-new");
   });
 
@@ -186,5 +188,55 @@ describe("POST /api/cases (upload)", () => {
     const big = Buffer.alloc(15 * 1024 * 1024 + 1, 0x25);
     expect((await createCase(upload(big))).status).toBe(400);
     expect(mocks.saveUpload).not.toHaveBeenCalled();
+  });
+
+  describe("partial failures never leave orphans", () => {
+    it("if the file can't be stored, no case is created at all", async () => {
+      mocks.saveUpload.mockRejectedValue(new Error("blob unavailable"));
+      const res = await createCase(upload(Buffer.from("%PDF-1.7 fake pdf content")));
+      expect(res.status).toBe(502);
+      expect(mocks.db.case.create).not.toHaveBeenCalled();
+      expect(mocks.enqueueJob).not.toHaveBeenCalled();
+    });
+
+    it("stores the file BEFORE writing the case (so a storage failure has nothing to roll back)", async () => {
+      const order: string[] = [];
+      mocks.saveUpload.mockImplementation(async () => {
+        order.push("store");
+        return { storageKey: "user-me/k.pdf", sha256: "abc", sizeBytes: 20 };
+      });
+      mocks.db.case.create.mockImplementation(async () => {
+        order.push("case");
+        return { id: "case-new", documents: [{ id: "doc-new" }] };
+      });
+      await createCase(upload(Buffer.from("%PDF-1.7 fake pdf content")));
+      expect(order).toEqual(["store", "case"]);
+    });
+
+    it("writes the case, document and timeline event in ONE nested create (atomic)", async () => {
+      await createCase(upload(Buffer.from("%PDF-1.7 fake pdf content")));
+      expect(mocks.db.case.create).toHaveBeenCalledTimes(1);
+      const data = mocks.db.case.create.mock.calls[0][0].data;
+      expect(data.documents.create).toBeDefined();
+      expect(data.events.create.type).toBe("document_added");
+      expect(mocks.db.document.create).not.toHaveBeenCalled();
+    });
+
+    it("if the database write fails, the already-stored file is deleted and no job is queued", async () => {
+      mocks.db.case.create.mockRejectedValue(new Error("db down"));
+      const res = await createCase(upload(Buffer.from("%PDF-1.7 fake pdf content")));
+      expect(res.status).toBe(500);
+      expect(mocks.deleteUpload).toHaveBeenCalledWith("user-me/k-receipt.pdf");
+      expect(mocks.enqueueJob).not.toHaveBeenCalled();
+    });
+
+    it("if the analysis job can't be queued, the case is left in a recoverable state, not 'in progress' forever", async () => {
+      mocks.enqueueJob.mockRejectedValue(new Error("queue down"));
+      const res = await createCase(upload(Buffer.from("%PDF-1.7 fake pdf content")));
+      expect(res.status).toBe(201);
+      expect(mocks.db.case.update.mock.calls[0][0].data.status).toBe("information_needed");
+      expect(mocks.db.caseEvent.create).toHaveBeenCalledTimes(1);
+      expect(mocks.deleteUpload).not.toHaveBeenCalled(); // the saved case keeps its file
+    });
   });
 });

@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireUserApi } from "@/lib/session";
 import { newCaseSchema } from "@/lib/validation";
 import { ALLOWED_UPLOAD_MIME_TYPES, DOCUMENT_STATUS, MAX_UPLOAD_SIZE_BYTES } from "@/lib/types";
-import { saveUpload } from "@/lib/storage";
+import { saveUpload, deleteUpload } from "@/lib/storage";
 import { enqueueJob, runCaseJobsInline } from "@/lib/jobs/queue";
 import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { writeAuditLog } from "@/lib/security/audit";
@@ -78,47 +78,62 @@ export async function POST(request: Request) {
 
   const { problemCategory, userStatedProblem } = parsed.data;
 
-  const caseRecord = await db.case.create({
-    data: {
-      userId: user.id,
-      problemCategory,
-      userStatedProblem,
-      caseType: "unknown",
-      status: "analysis_in_progress",
-    },
-  });
+  // Order matters. Store the file FIRST (nothing to roll back if it fails), then write the case,
+  // document and timeline event in ONE atomic nested create, so a failure can never leave an orphan
+  // case stuck at "analysis in progress" or a document without a case.
+  let stored: { storageKey: string; sha256: string; sizeBytes: number };
+  try {
+    stored = await saveUpload({ userId: user.id, fileName: file.name, bytes });
+  } catch {
+    return NextResponse.json({ error: "We couldn't store your file. Please try again." }, { status: 502 });
+  }
 
-  const { storageKey, sha256, sizeBytes } = await saveUpload({
-    userId: user.id,
-    fileName: file.name,
-    bytes,
-  });
+  let caseRecord: { id: string; documents: { id: string }[] };
+  try {
+    caseRecord = await db.case.create({
+      data: {
+        userId: user.id,
+        problemCategory,
+        userStatedProblem,
+        caseType: "unknown",
+        status: "analysis_in_progress",
+        documents: {
+          create: {
+            userId: user.id,
+            fileName: file.name,
+            storageKey: stored.storageKey,
+            mimeType: sniffedType,
+            sizeBytes: stored.sizeBytes,
+            sha256: stored.sha256,
+            // Type is verified against the real content bytes (sniffFileType), size is capped, and the
+            // name is sanitized. That is validation, NOT malware scanning: no scanner exists, so this
+            // is recorded as "validated" and must never be described as scanned or clean.
+            securityStatus: DOCUMENT_STATUS.validated,
+          },
+        },
+        events: { create: { type: "document_added", message: `Uploaded ${file.name}.` } },
+      },
+      include: { documents: { select: { id: true } } },
+    });
+  } catch {
+    await deleteUpload(stored.storageKey); // don't leave an orphaned file behind
+    return NextResponse.json({ error: "We couldn't save your case. Please try again." }, { status: 500 });
+  }
 
-  const document = await db.document.create({
-    data: {
-      userId: user.id,
+  try {
+    await enqueueJob({
       caseId: caseRecord.id,
-      fileName: file.name,
-      storageKey,
-      mimeType: sniffedType,
-      sizeBytes,
-      sha256,
-      // Type is verified against the real content bytes (sniffFileType), size is capped, and the
-      // name is sanitized. That is validation, NOT malware scanning: no scanner exists, so this
-      // is recorded as "validated" and must never be described as scanned or clean.
-      securityStatus: DOCUMENT_STATUS.validated,
-    },
-  });
-
-  await db.caseEvent.create({
-    data: {
-      caseId: caseRecord.id,
-      type: "document_added",
-      message: `Uploaded ${file.name}.`,
-    },
-  });
-
-  await enqueueJob({ caseId: caseRecord.id, type: "analyze_document", payload: { documentId: document.id } });
+      type: "analyze_document",
+      payload: { documentId: caseRecord.documents[0].id },
+    });
+  } catch {
+    // The case and document are saved; only starting the analysis failed. Leave the case in a state
+    // the user can recover from (adding information re-runs analysis) instead of "in progress" forever.
+    await db.case.update({ where: { id: caseRecord.id }, data: { status: "information_needed" } });
+    await db.caseEvent.create({
+      data: { caseId: caseRecord.id, type: "system", message: "Analysis couldn't be started. Add more information to try again." },
+    });
+  }
 
   await writeAuditLog({
     userId: user.id,
