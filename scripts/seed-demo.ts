@@ -23,10 +23,12 @@
 import "dotenv/config";
 import { neonConfig } from "@neondatabase/serverless";
 import { PrismaNeon } from "@prisma/adapter-neon";
+import { PrismaPg } from "@prisma/adapter-pg";
 import ws from "ws";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { saveUpload, deleteAllUploadsForUser } from "../src/lib/storage";
+import { pickDriver } from "../src/lib/dbDriver";
 
 neonConfig.webSocketConstructor = ws;
 
@@ -34,7 +36,9 @@ const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   throw new Error("DATABASE_URL is not set.");
 }
-const db = new PrismaClient({ adapter: new PrismaNeon({ connectionString }) });
+const db = new PrismaClient({
+  adapter: pickDriver(connectionString) === "neon" ? new PrismaNeon({ connectionString }) : new PrismaPg({ connectionString }),
+});
 
 const DEMO_EMAIL = "demo@redress.app";
 const DEMO_PASSWORD = "RedressDemo2026!";
