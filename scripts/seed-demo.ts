@@ -144,7 +144,7 @@ async function main() {
         mimeType: "application/pdf",
         sizeBytes: doc.sizeBytes,
         sha256: doc.sha256,
-        scanStatus: "clean",
+        securityStatus: "validated",
         createdAt: created,
       },
     });
@@ -336,7 +336,7 @@ async function main() {
         mimeType: "application/pdf",
         sizeBytes: doc.sizeBytes,
         sha256: doc.sha256,
-        scanStatus: "clean",
+        securityStatus: "validated",
         createdAt: created,
       },
     });
@@ -475,7 +475,7 @@ async function main() {
         mimeType: "application/pdf",
         sizeBytes: doc.sizeBytes,
         sha256: doc.sha256,
-        scanStatus: "clean",
+        securityStatus: "validated",
         createdAt: created,
       },
     });
@@ -634,7 +634,7 @@ async function main() {
         mimeType: "application/pdf",
         sizeBytes: doc.sizeBytes,
         sha256: doc.sha256,
-        scanStatus: "clean",
+        securityStatus: "validated",
         createdAt: created,
       },
     });

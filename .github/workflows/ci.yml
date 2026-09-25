@@ -20,6 +20,11 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm test
+      # Production compile check (not `npm run build`, which also runs database migrations).
+      # Placeholder values only: nothing is contacted and no real credentials are used.
+      - run: npx next build
+        env:
+          AUTH_SECRET: ci-build-only-not-a-real-secret-0123456789
 
   secrets:
     runs-on: ubuntu-latest

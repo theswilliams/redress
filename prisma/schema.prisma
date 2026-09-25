@@ -141,7 +141,10 @@ model Document {
   sizeBytes     Int
   sha256        String
 
-  scanStatus    String   @default("pending") // pending | clean | flagged | error
+  // validated     = passed size, allow-listed type and magic-byte checks; NOT malware scanned (default)
+  // scanned_clean = a real scanner inspected it and found nothing (no scanner exists yet)
+  // quarantined   = a scanner flagged it
+  securityStatus String  @default("validated")
   extractedText String?  // raw text extracted for AI processing (untrusted input)
 
   createdAt     DateTime @default(now())

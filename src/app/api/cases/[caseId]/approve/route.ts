@@ -6,6 +6,7 @@ import { writeAuditLog } from "@/lib/security/audit";
 import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { containsUnfilledPlaceholder } from "@/lib/ai/safetyLayer";
 import { sendClaimEmail } from "@/lib/email/send";
+import { isEmailConfigured } from "@/lib/email/client";
 
 export async function POST(request: Request, { params }: { params: Promise<{ caseId: string }> }) {
   const user = await requireUserApi();
@@ -64,6 +65,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
         { error: "This message still has an unfilled placeholder (e.g. \"[INSERT ...]\"). Edit it to fill in the details before approving." },
         { status: 400 },
       );
+    }
+    // Real emails go out with the user's address as Reply-To, so the address must be verified first
+    // (otherwise anyone could register with a victim's address and send mail as them).
+    if (isEmailConfigured()) {
+      const account = await db.user.findUnique({ where: { id: user.id }, select: { emailVerifiedAt: true } });
+      if (!account?.emailVerifiedAt) {
+        return NextResponse.json(
+          { error: "Verify your email address before sending. Use the banner at the top of the page to resend the link." },
+          { status: 403 },
+        );
+      }
     }
     if (!recipientEmail) {
       return NextResponse.json(

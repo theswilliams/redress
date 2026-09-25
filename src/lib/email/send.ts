@@ -29,7 +29,8 @@ export async function sendEmail(params: {
       from: EMAIL_FROM,
       to: params.to,
       replyTo: params.replyTo,
-      subject: params.subject,
+      // Single line only: strip CR/LF so a subject can never smuggle extra headers.
+      subject: params.subject.replace(/[\r\n]+/g, " ").slice(0, 200),
       text: params.body,
     });
 

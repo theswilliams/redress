@@ -19,8 +19,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ doc
   return new NextResponse(new Uint8Array(bytes), {
     headers: {
       "Content-Type": document.mimeType,
-      "Content-Disposition": `inline; filename="${encodeURIComponent(document.fileName)}"`,
+      "Content-Disposition": `inline; filename="${encodeURIComponent(document.fileName)}"`, // percent-encoded: no quotes/CRLF
       "Cache-Control": "private, no-store",
+      // Uploaded files are untrusted: never let the browser sniff a different type, and sandbox
+      // the response so an embedded script can't run with this site's origin.
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'",
     },
   });
 }

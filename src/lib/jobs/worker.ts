@@ -10,9 +10,12 @@ import { runAnalysisPipeline } from "@/lib/ai/pipeline";
  * information. Callers only use `enqueueJob` + this function, so it is the seam
  * to swap in a real queue (BullMQ/SQS/etc) with retries and backoff.
  */
-export async function processQueuedJobs(limit = 5) {
+export async function processQueuedJobs(options: { limit?: number; caseId?: string } = {}) {
+  const { limit = 5, caseId } = options;
   const jobs = await db.job.findMany({
-    where: { status: "queued" },
+    // When called from a request handler, pass the caller's caseId so one user's request can
+    // never run (or fail) another user's job. A future background worker omits it.
+    where: { status: "queued", ...(caseId ? { caseId } : {}) },
     orderBy: { createdAt: "asc" },
     take: limit,
   });

@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireUserApi } from "@/lib/session";
 import { newCaseSchema } from "@/lib/validation";
-import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } from "@/lib/types";
+import { ALLOWED_UPLOAD_MIME_TYPES, DOCUMENT_STATUS, MAX_UPLOAD_SIZE_BYTES } from "@/lib/types";
 import { saveUpload } from "@/lib/storage";
-import { enqueueJob } from "@/lib/jobs/queue";
-import { processQueuedJobs } from "@/lib/jobs/worker";
+import { enqueueJob, runCaseJobsInline } from "@/lib/jobs/queue";
 import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { writeAuditLog } from "@/lib/security/audit";
 import { sniffFileType } from "@/lib/security/fileSignature";
@@ -104,10 +103,10 @@ export async function POST(request: Request) {
       mimeType: sniffedType,
       sizeBytes,
       sha256,
-      // File type is verified against real content bytes above (sniffFileType), not just the
-      // client-declared MIME type. "clean" here is still a placeholder for real antivirus
-      // scanning (e.g. ClamAV or VirusTotal) — that's a further integration seam, not yet wired up.
-      scanStatus: "clean",
+      // Type is verified against the real content bytes (sniffFileType), size is capped, and the
+      // name is sanitized. That is validation, NOT malware scanning: no scanner exists, so this
+      // is recorded as "validated" and must never be described as scanned or clean.
+      securityStatus: DOCUMENT_STATUS.validated,
     },
   });
 
@@ -132,7 +131,7 @@ export async function POST(request: Request) {
   // MVP: process the queue inline so the case is ready by the time we
   // respond. See src/lib/jobs/worker.ts for the swap-in seam to a real
   // background worker/queue for production.
-  await processQueuedJobs();
+  await runCaseJobsInline(caseRecord.id);
 
   return NextResponse.json({ caseId: caseRecord.id }, { status: 201 });
 }

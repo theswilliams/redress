@@ -11,7 +11,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cas
   const caseRecord = await db.case.findUnique({
     where: { id: caseId },
     include: {
-      documents: true,
+      documents: {
+        // Internal storage keys and raw extracted text stay server-side.
+        select: { id: true, fileName: true, mimeType: true, sizeBytes: true, sha256: true, securityStatus: true, createdAt: true },
+      },
       transactions: true,
       communications: true,
       events: { orderBy: { createdAt: "asc" } },

@@ -127,6 +127,18 @@ export const OUTCOME_TYPE_LABELS: Record<OutcomeType, string> = {
   no_recovery: "No recovery",
 };
 
+/**
+ * Document security state. Deliberately does NOT contain a value meaning "clean" until a real
+ * malware scanner is integrated: today uploads are only validated (size, allow-listed type,
+ * magic bytes), which says nothing about malicious content.
+ */
+export const DOCUMENT_STATUS = {
+  validated: "validated", // passed size/type/signature checks; NOT malware scanned
+  scannedClean: "scanned_clean", // reserved: set only by a real scanner
+  quarantined: "quarantined", // reserved: set only by a real scanner
+} as const;
+export type DocumentStatus = (typeof DOCUMENT_STATUS)[keyof typeof DOCUMENT_STATUS];
+
 export const ALLOWED_UPLOAD_MIME_TYPES = [
   "application/pdf",
   "image/png",

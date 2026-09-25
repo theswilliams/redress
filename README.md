@@ -15,13 +15,13 @@ A user uploads a document and describes the problem. A four-stage pipeline extra
 *[Edit in your own words. Suggested:]* Most AI demos end at "upload a file, get a summary." I wanted to work on the harder part: letting a model contribute to a real-world action (an email to a third party) while guaranteeing it can't act without the user's consent, and being honest about what the model does and doesn't know.
 
 ## Key Features
-- Document upload (PDF/PNG/JPEG/WebP) with **byte-level file-type verification**.
+- Document upload (PDF/PNG/JPEG/WebP) with **byte-level file-type verification**. Uploads are recorded as `validated` (size, type and signature checked); there is **no malware scanning**, and the app never labels a file "clean" or "scanned".
 - **Four-stage AI pipeline:** document analysis → opportunity detection → policy research → claim drafting. Each stage's input and output is stored for traceability.
 - **Confidence labels:** extracted fields carry confidence/uncertain flags; research findings carry a certainty level (`confirmed_policy`, `likely_possibility`, `user_specific_assumption`, `unknown`), shown in the UI.
 - **Human approval:** edit the draft, supply the recipient address yourself, approve or edit. Failed sends leave the approval pending with the error shown.
 - **Re-analysis:** add more information and the pipeline re-runs; any older pending approval is superseded so a stale draft can't be sent.
 - Outcome tracking (resolved/rejected, recovered amount), dashboard stats, case timeline.
-- Accounts: register, sign in, password reset by email, email verification (tracked, not enforced), account deletion, audit log.
+- Accounts: register, sign in, password reset by email, email verification (**required before a real email is sent**, see below), account deletion, audit log.
 
 ## Architecture
 ```
@@ -31,7 +31,8 @@ Browser ─► Next.js 16 (App Router pages + API routes)
               ├─ Prisma 7 ─► Postgres (Neon)   [cases, documents, AIAnalysis, Communication,
               │                                  UserApproval, Job, AuditLog, …]
               ├─ Upload ─► Vercel Blob (local disk in dev)
-              ├─ Job row created ─► worker runs pipeline (inline, in-request today)
+              ├─ Job row created ─► pipeline runs INLINE in the same request (not a background
+              │                     worker), scoped to that case; failures are recorded, not retried
               │       └─ Gemini (JSON-schema output) ─► Zod validation ─► safety layer
               ├─ Draft saved as Communication(status = "draft") + UserApproval(pending)
               └─ POST /approve  ─► checks session, ownership, rate limit, placeholders,
@@ -43,6 +44,9 @@ Browser ─► Next.js 16 (App Router pages + API routes)
 - **Prompt-injection awareness:** uploaded documents are treated as untrusted data in every agent prompt, and because the gate doesn't depend on model behaviour, a hostile document still can't trigger a send.
 - **Structured, validated model output:** Gemini is called with a JSON schema, then parsed with Zod; invalid output fails loudly.
 - **Draft safety screen:** deterministic checks flag threats, legal claims and "guarantee" language, and unfilled `[INSERT …]` placeholders block approval. (A guardrail, not a filter: rule-based and bypassable.)
+- **Ownership on every route:** cases, documents, approvals and notes are looked up and checked against the signed-in user (a uniform 404 for someone else's record); regression tests cover each route. Document downloads are served with `nosniff` and a sandboxing CSP, and internal storage keys are never returned by the API.
+- **Verified email before real sends:** when a real email provider is configured, the approval route refuses to send from an unverified account, because the message carries the user's address as Reply-To.
+- **Emailed links** (password reset, verification) use a configured base URL (`APP_URL` / Vercel production URL), never the request's Host header.
 - **Rate limiting** (Upstash Redis with an in-memory fallback for local dev) on sign-in (per IP, and per account), registration, password reset, case creation, approval, notes and outcome routes.
 - **Shared demo account protected:** deletion and password reset are refused for it, since its credentials are public.
 - **Upload validation** by magic bytes, not client MIME type.
@@ -50,8 +54,8 @@ Browser ─► Next.js 16 (App Router pages + API routes)
 - Demo seed script writes straight to the database so the demo needs no live AI calls.
 
 ## Testing
-`npm test`: **55 Vitest tests in 7 files**. Last run: 55 passed. They cover billing config, file-signature sniffing, rate limiting, the safety layer and validation schemas, plus route-level tests of the **approval gate** (unauthenticated, rate-limited, someone else's case, nothing pending, missing recipient, unfilled placeholder, successful send to the user-typed address, provider failure keeps the approval pending, edit and reject never send), demo-account protection, and the job worker's claim/failure handling. `npm run lint` and `tsc --noEmit` are clean, and GitHub Actions runs lint, type-check, tests and a Gitleaks secret scan.
-Not covered: the AI pipeline itself (no live model calls in tests), authentication end to end, and the UI. Database, session, email and rate-limit dependencies are mocked in the route tests.
+`npm test`: **82 Vitest tests in 9 files**. Last run: 82 passed. They cover billing config, file-signature sniffing, rate limiting, the safety layer and validation schemas, plus route-level tests of the **approval gate** (unauthenticated, rate-limited, someone else's case, nothing pending, missing recipient, unfilled placeholder, successful send to the user-typed address, provider failure keeps the approval pending, edit and reject never send), demo-account protection, and the job worker's claim/failure handling. `npm run lint` and `tsc --noEmit` are clean, and GitHub Actions runs lint, type-check, tests and a Gitleaks secret scan.
+Also covered: ownership (IDOR) checks on the document, case, notes and outcome routes, the upload's honest `validated` status, storage-path containment, the emailed-link base URL, and job scoping (a request only runs its own case's job). Not covered: the AI pipeline itself (no live model calls in tests), authentication end to end, and the UI. Database, session, email and rate-limit dependencies are mocked in the route tests.
 
 ## Tech Stack
 Next.js 16, React 19, TypeScript, Tailwind CSS 4, Prisma 7 + PostgreSQL (Neon), Auth.js (NextAuth v5), bcryptjs, Zod, Google Gemini (`@google/genai`), Resend, Vercel Blob, Upstash Redis rate limiting, Vitest, ESLint, GitHub Actions, Vercel.
@@ -70,7 +74,8 @@ Set `GEMINI_API_KEY` for real analysis (otherwise demo mode) and `RESEND_API_KEY
 ## Current Status
 Working personal portfolio project. Known limitations, stated plainly:
 - The analysis job runs **inline in the request** (claimed atomically); failed jobs are marked failed and are **not retried automatically**. The user can re-run analysis by adding more information.
-- Virus scanning is a placeholder; email verification is tracked but not enforced; billing is configuration only (no payment processing).
+- **No malware scanning** exists. Uploads are validated (size, type, magic bytes) and stored privately, but never scanned; the `securityStatus` field says `validated`, and `scanned_clean` is reserved for a future real scanner. Billing is configuration only (no payment processing). The Vercel request-body limit (about 4.5 MB) is lower than the app's 15 MB cap, so larger uploads fail on Vercel.
+- `npm audit` reports 4 high findings, all inside the Prisma CLI toolchain (npm's suggested fix is downgrading Prisma to 6); none is in request-handling code. Next.js is on a patched release.
 - Gemini only. Not evaluated for accuracy on real-world documents.
 
 ## Future Development

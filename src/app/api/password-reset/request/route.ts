@@ -6,6 +6,7 @@ import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { writeAuditLog } from "@/lib/security/audit";
 import { sendPasswordResetEmail } from "@/lib/email/send";
 import { isDemoEmail } from "@/lib/demo";
+import { appUrl } from "@/lib/appUrl";
 
 export async function POST(request: Request) {
   const ip = getClientIp(request.headers);
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
     await writeAuditLog({ userId: user.id, action: "password_reset.requested", ip });
 
     const resetPath = `/reset-password/confirm?token=${token}`;
-    const resetUrl = new URL(resetPath, request.url).toString();
+    const resetUrl = appUrl(resetPath, request.url); // configured origin, not the Host header
 
     const sendResult = await sendPasswordResetEmail({ to: user.email, resetUrl });
     if (!sendResult.ok) {

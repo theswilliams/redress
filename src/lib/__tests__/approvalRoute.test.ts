@@ -8,8 +8,10 @@ const mocks = vi.hoisted(() => ({
   requireUserApi: vi.fn(),
   rateLimit: vi.fn(),
   sendClaimEmail: vi.fn(),
+  isEmailConfigured: vi.fn(),
   writeAuditLog: vi.fn(),
   db: {
+    user: { findUnique: vi.fn() },
     case: { findUnique: vi.fn(), update: vi.fn() },
     userApproval: { findFirst: vi.fn(), update: vi.fn() },
     communication: { findUnique: vi.fn(), update: vi.fn() },
@@ -25,6 +27,7 @@ vi.mock("@/lib/security/rateLimit", () => ({
 }));
 vi.mock("@/lib/security/audit", () => ({ writeAuditLog: mocks.writeAuditLog }));
 vi.mock("@/lib/email/send", () => ({ sendClaimEmail: mocks.sendClaimEmail }));
+vi.mock("@/lib/email/client", () => ({ isEmailConfigured: mocks.isEmailConfigured }));
 
 import { POST } from "@/app/api/cases/[caseId]/approve/route";
 
@@ -55,6 +58,8 @@ beforeEach(() => {
     body: "Hello, I would like a refund for order 123.",
   });
   mocks.sendClaimEmail.mockResolvedValue({ ok: true, providerMessageId: "msg-1" });
+  mocks.isEmailConfigured.mockReturnValue(false);
+  mocks.db.user.findUnique.mockResolvedValue({ emailVerifiedAt: new Date() });
 });
 
 const sentUpdate = () =>
@@ -145,5 +150,30 @@ describe("approval gate", () => {
     expect(res.status).toBe(200);
     expect(mocks.sendClaimEmail).not.toHaveBeenCalled();
     expect(mocks.db.case.update.mock.calls[0][0].data.status).toBe("closed");
+  });
+
+  describe("verified-email requirement (only when real email is configured)", () => {
+    it("blocks a real send from an unverified account", async () => {
+      mocks.isEmailConfigured.mockReturnValue(true);
+      mocks.db.user.findUnique.mockResolvedValue({ emailVerifiedAt: null });
+      const res = await call({ decision: "approved", recipientEmail: "a@b.com" });
+      expect(res.status).toBe(403);
+      expect(mocks.sendClaimEmail).not.toHaveBeenCalled();
+      expect(sentUpdate()).toBeUndefined();
+    });
+
+    it("allows a real send from a verified account", async () => {
+      mocks.isEmailConfigured.mockReturnValue(true);
+      mocks.db.user.findUnique.mockResolvedValue({ emailVerifiedAt: new Date() });
+      expect((await call({ decision: "approved", recipientEmail: "a@b.com" })).status).toBe(200);
+      expect(mocks.sendClaimEmail).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not block the simulated (no email provider) flow, since nothing real is sent", async () => {
+      mocks.isEmailConfigured.mockReturnValue(false);
+      mocks.db.user.findUnique.mockResolvedValue({ emailVerifiedAt: null });
+      mocks.sendClaimEmail.mockResolvedValue({ ok: false, error: "EMAIL_NOT_CONFIGURED" });
+      expect((await call({ decision: "approved", recipientEmail: "a@b.com" })).status).toBe(200);
+    });
   });
 });

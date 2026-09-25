@@ -19,6 +19,12 @@ function blobConfigured(): boolean {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 }
 
+/** True only if `target` is STORAGE_ROOT or a path inside it (a bare startsWith would also accept `uploads-evil`). */
+export function isInsideStorageRoot(target: string, root: string = STORAGE_ROOT): boolean {
+  const rel = path.relative(root, path.resolve(target));
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
 function sanitizeFileName(name: string): string {
   const base = path.basename(name).replace(/[^a-zA-Z0-9._-]/g, "_");
   return base.slice(-120) || "file";
@@ -48,7 +54,7 @@ export async function saveUpload(params: {
     await mkdir(dir, { recursive: true });
     const fullPath = path.join(STORAGE_ROOT, storageKey);
     // Defense in depth against path traversal even though we built the key ourselves.
-    if (!fullPath.startsWith(STORAGE_ROOT)) {
+    if (!isInsideStorageRoot(fullPath)) {
       throw new Error("Invalid storage path");
     }
     await writeFile(fullPath, params.bytes);
@@ -67,7 +73,7 @@ export async function readUpload(storageKey: string): Promise<Buffer> {
   }
 
   const fullPath = path.join(STORAGE_ROOT, storageKey);
-  if (!fullPath.startsWith(STORAGE_ROOT)) {
+  if (!isInsideStorageRoot(fullPath)) {
     throw new Error("Invalid storage path");
   }
   return readFile(fullPath);
@@ -80,7 +86,7 @@ export async function deleteUpload(storageKey: string): Promise<void> {
   }
 
   const fullPath = path.join(STORAGE_ROOT, storageKey);
-  if (!fullPath.startsWith(STORAGE_ROOT)) {
+  if (!isInsideStorageRoot(fullPath)) {
     throw new Error("Invalid storage path");
   }
   await unlink(fullPath).catch(() => undefined);
@@ -97,7 +103,7 @@ export async function deleteAllUploadsForUser(userId: string): Promise<void> {
   }
 
   const dir = path.join(STORAGE_ROOT, userId);
-  if (!dir.startsWith(STORAGE_ROOT)) {
+  if (!isInsideStorageRoot(dir)) {
     throw new Error("Invalid storage path");
   }
   await rm(dir, { recursive: true, force: true });

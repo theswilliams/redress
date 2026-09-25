@@ -3,8 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUserApi } from "@/lib/session";
 import { rateLimit } from "@/lib/security/rateLimit";
-import { enqueueJob } from "@/lib/jobs/queue";
-import { processQueuedJobs } from "@/lib/jobs/worker";
+import { enqueueJob, runCaseJobsInline } from "@/lib/jobs/queue";
 
 const noteSchema = z.object({ note: z.string().trim().min(1).max(2000) });
 
@@ -62,7 +61,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
     });
 
     await enqueueJob({ caseId, type: "analyze_document", payload: { documentId: latestDocument.id } });
-    await processQueuedJobs();
+    await runCaseJobsInline(caseId);
   } else if (caseRecord.status === "ready_for_review" || caseRecord.status === "information_needed") {
     await db.case.update({ where: { id: caseId }, data: { status: "additional_information_requested" } });
   }
