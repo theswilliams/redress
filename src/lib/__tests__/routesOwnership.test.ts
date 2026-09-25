@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   db: {
     case: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     document: { findUnique: vi.fn(), create: vi.fn() },
+    job: { count: vi.fn() },
     caseEvent: { create: vi.fn() },
     recoveryOutcome: { create: vi.fn() },
   },
@@ -47,6 +48,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireUserApi.mockResolvedValue(ME);
   mocks.rateLimit.mockResolvedValue({ allowed: true, remaining: 5 });
+  mocks.db.job.count.mockResolvedValue(0);
 });
 
 describe("GET /api/documents/[documentId]", () => {
@@ -238,5 +240,51 @@ describe("POST /api/cases (upload)", () => {
       expect(mocks.db.caseEvent.create).toHaveBeenCalledTimes(1);
       expect(mocks.deleteUpload).not.toHaveBeenCalled(); // the saved case keeps its file
     });
+  });
+});
+
+describe("daily AI budget (cost-abuse control)", () => {
+  const upload = () => {
+    const form = new FormData();
+    form.set("problemCategory", "refund");
+    form.set("file", new File([new Uint8Array(Buffer.from("%PDF-1.7 fake pdf content"))], "r.pdf", { type: "application/pdf" }));
+    return new Request("http://localhost/api/cases", { method: "POST", body: form });
+  };
+
+  it("refuses a new case once the user is over the daily limit: nothing stored, nothing queued", async () => {
+    mocks.db.job.count.mockResolvedValue(20);
+    const res = await createCase(upload());
+    expect(res.status).toBe(429);
+    expect(mocks.saveUpload).not.toHaveBeenCalled();
+    expect(mocks.db.case.create).not.toHaveBeenCalled();
+    expect(mocks.enqueueJob).not.toHaveBeenCalled();
+  });
+
+  it("counts only this user's analyses from the last 24 hours", async () => {
+    await createCase(upload());
+    const where = mocks.db.job.count.mock.calls[0][0].where;
+    expect(where.type).toBe("analyze_document");
+    expect(where.case).toEqual({ userId: "user-me" });
+    const ageMs = Date.now() - where.createdAt.gte.getTime();
+    expect(ageMs).toBeGreaterThan(23.9 * 3600_000);
+    expect(ageMs).toBeLessThan(24.1 * 3600_000);
+  });
+
+  it("allows a new case while under the limit", async () => {
+    mocks.db.job.count.mockResolvedValue(19);
+    mocks.saveUpload.mockResolvedValue({ storageKey: "user-me/k.pdf", sha256: "abc", sizeBytes: 20 });
+    mocks.db.case.create.mockResolvedValue({ id: "case-new", documents: [{ id: "doc-new" }] });
+    expect((await createCase(upload())).status).toBe(201);
+  });
+
+  it("over the limit, a note is still saved but the paid re-analysis is skipped", async () => {
+    mocks.db.job.count.mockResolvedValue(20);
+    mocks.db.case.findUnique.mockResolvedValue({ id: "c1", userId: ME.id, status: "ready_for_review", userStatedProblem: "x", documents: [{ id: "d1" }] });
+    const res = await addNote(req("POST", { note: "extra info" }), ctx({ caseId: "c1" }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).analysisSkipped).toBe(true);
+    expect(mocks.db.caseEvent.create).toHaveBeenCalledTimes(1);
+    expect(mocks.enqueueJob).not.toHaveBeenCalled();
+    expect(mocks.runCaseJobsInline).not.toHaveBeenCalled();
   });
 });

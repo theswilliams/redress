@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUserApi } from "@/lib/session";
 import { rateLimit } from "@/lib/security/rateLimit";
+import { analysisBudgetExceeded, BUDGET_EXCEEDED_MESSAGE } from "@/lib/aiBudget";
 import { enqueueJob, runCaseJobsInline } from "@/lib/jobs/queue";
 
 const noteSchema = z.object({ note: z.string().trim().min(1).max(2000) });
@@ -45,6 +46,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
 
   const latestDocument = caseRecord.documents[0];
   const canRerun = RERUNNABLE_STATUSES.includes(caseRecord.status) && latestDocument;
+
+  // The note itself is always saved; only the paid re-analysis is limited by the daily budget.
+  if (canRerun && (await analysisBudgetExceeded(user.id))) {
+    return NextResponse.json({ ok: true, analysisSkipped: true, message: BUDGET_EXCEEDED_MESSAGE });
+  }
 
   if (canRerun) {
     // Fold the note into the context Redress reasons about, then re-run the

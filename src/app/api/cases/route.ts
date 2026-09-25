@@ -6,6 +6,7 @@ import { ALLOWED_UPLOAD_MIME_TYPES, DOCUMENT_STATUS, MAX_UPLOAD_SIZE_BYTES } fro
 import { saveUpload, deleteUpload } from "@/lib/storage";
 import { enqueueJob, runCaseJobsInline } from "@/lib/jobs/queue";
 import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
+import { analysisBudgetExceeded, BUDGET_EXCEEDED_MESSAGE } from "@/lib/aiBudget";
 import { writeAuditLog } from "@/lib/security/audit";
 import { sniffFileType } from "@/lib/security/fileSignature";
 
@@ -35,6 +36,11 @@ export async function POST(request: Request) {
   const { allowed } = await rateLimit(`case-create:${user.id}`, { limit: 10, windowMs: 60_000 });
   if (!allowed) {
     return NextResponse.json({ error: "Too many uploads. Try again shortly." }, { status: 429 });
+  }
+
+  // Cheap check first: no file is read or stored for a user who is over today's AI budget.
+  if (await analysisBudgetExceeded(user.id)) {
+    return NextResponse.json({ error: BUDGET_EXCEEDED_MESSAGE }, { status: 429 });
   }
 
   const formData = await request.formData().catch(() => null);
