@@ -7,6 +7,7 @@ import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { containsUnfilledPlaceholder } from "@/lib/ai/safetyLayer";
 import { sendClaimEmail } from "@/lib/email/send";
 import { isEmailConfigured } from "@/lib/email/client";
+import { isDemoEmail } from "@/lib/demo";
 
 export async function POST(request: Request, { params }: { params: Promise<{ caseId: string }> }) {
   const user = await requireUserApi();
@@ -88,12 +89,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
       await db.communication.update({ where: { id: communication.id }, data: { body: editedBody, draftedBy: "user" } });
     }
 
-    const sendResult = await sendClaimEmail({
-      to: recipientEmail,
-      subject: finalSubject,
-      body: finalBody,
-      replyTo: user.email,
-    });
+    // The shared demo account's password is public, so it must never cause a real email to go out,
+    // whatever the provider configuration is: it always takes the simulated path.
+    const demoAccount = isDemoEmail(user.email);
+    const sendResult: Awaited<ReturnType<typeof sendClaimEmail>> = demoAccount
+      ? { ok: false, error: "EMAIL_NOT_CONFIGURED" }
+      : await sendClaimEmail({
+          to: recipientEmail,
+          subject: finalSubject,
+          body: finalBody,
+          replyTo: user.email,
+        });
 
     if (sendResult.ok) {
       await db.communication.update({
@@ -130,7 +136,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cas
         data: {
           caseId,
           type: "approval",
-          message: `You approved the request. (Simulated submission to ${recipientEmail} — no email provider is connected in this environment.)`,
+          message: demoAccount
+            ? `You approved the request. (Simulated submission to ${recipientEmail} — the shared demo account never sends real email.)`
+            : `You approved the request. (Simulated submission to ${recipientEmail} — no email provider is connected in this environment.)`,
         },
       });
     } else {

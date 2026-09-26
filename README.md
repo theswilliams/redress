@@ -6,13 +6,22 @@ An AI-assisted workflow for turning a receipt, bill or customer-service problem 
 
 > Portfolio project. No real users. AI features use Google Gemini; without an API key the app runs in a clearly labelled demo mode.
 
-<!-- TODO: Add screenshots: case list, analysis result with confidence labels, approval panel. -->
+## Screenshots
+
+| | |
+| --- | --- |
+| ![Dashboard](docs/dashboard.png) | ![Approval gate](docs/approval-gate.png) |
+| **Dashboard**: recovered, recoverable, active cases | **Approval gate**: the user reviews the draft and types the recipient; nothing is sent until they approve |
+| ![Awaiting response](docs/awaiting-response.png) | ![Rejected, low confidence](docs/rejected-low-confidence.png) |
+| **Tracking**: after approval, the case waits for the merchant and the outcome is recorded | **Honest outcomes**: a low-confidence claim flagged as an assumption, and a rejection recorded as no recovery |
+
+Screenshots come from a local run of the seeded demo data (the same seed as the live demo). No real documents or people.
 
 ## Overview
 A user uploads a document and describes the problem. A four-stage pipeline extracts the facts, identifies what they might be entitled to, researches the merchant's likely policy, and drafts a message. The user reviews and edits the draft, enters the merchant's email address, and approves. Only then does the system send it, and it tracks the outcome.
 
 ## Why I Built It
-*[Edit in your own words. Suggested:]* Most AI demos end at "upload a file, get a summary." I wanted to work on the harder part: letting a model contribute to a real-world action (an email to a third party) while guaranteeing it can't act without the user's consent, and being honest about what the model does and doesn't know.
+Most AI demos end at "upload a file, get a summary." I wanted to work on the harder part: letting a model contribute to a real-world action (an email to a third party) while guaranteeing it can't act without the user's consent, and being honest about what the model does and doesn't know.
 
 ## Key Features
 - Document upload (PDF/PNG/JPEG/WebP) with **byte-level file-type verification**. Uploads are recorded as `validated` (size, type and signature checked); there is **no malware scanning**, and the app never labels a file "clean" or "scanned".
@@ -50,13 +59,13 @@ Browser ─► Next.js 16 (App Router pages + API routes)
 - **Baseline security headers** on every route, including `X-Frame-Options: DENY` so the approve/send buttons can't be clickjacked.
 - **Emailed links** (password reset, verification) use a configured base URL (`APP_URL` / Vercel production URL), never the request's Host header.
 - **Rate limiting** (Upstash Redis with an in-memory fallback for local dev) on sign-in (per IP, and per account), registration, password reset, case creation, approval, notes and outcome routes.
-- **Shared demo account protected:** deletion and password reset are refused for it, since its credentials are public.
+- **Shared demo account protected:** deletion and password reset are refused for it, since its credentials are public, and it can never send real email: approving a claim on it is always simulated and labelled as such, even if an email provider is configured.
 - **Upload validation** by magic bytes, not client MIME type.
 - **Auditability:** every agent call is stored; security-relevant actions write an audit log.
 - Demo seed script writes straight to the database so the demo needs no live AI calls.
 
 ## Testing
-`npm test`: **102 Vitest tests in 11 files**. Last run: 102 passed. They cover billing config, file-signature sniffing, rate limiting, the safety layer and validation schemas, plus route-level tests of the **approval gate** (unauthenticated, rate-limited, someone else's case, nothing pending, missing recipient, unfilled placeholder, successful send to the user-typed address, provider failure keeps the approval pending, edit and reject never send), demo-account protection, and the job worker's claim/failure handling. `npm run lint` and `tsc --noEmit` are clean, and GitHub Actions runs lint, type-check, tests and a Gitleaks secret scan.
+`npm test`: **105 Vitest tests in 11 files**. Last run: 105 passed. They cover billing config, file-signature sniffing, rate limiting, the safety layer and validation schemas, plus route-level tests of the **approval gate** (unauthenticated, rate-limited, someone else's case, nothing pending, missing recipient, unfilled placeholder, successful send to the user-typed address, provider failure keeps the approval pending, edit and reject never send), demo-account protection, and the job worker's claim/failure handling. `npm run lint` and `tsc --noEmit` are clean, and GitHub Actions runs lint, type-check, tests and a Gitleaks secret scan.
 Also covered: ownership (IDOR) checks on the document, case, notes and outcome routes, the upload's honest `validated` status and its failure handling (the file is stored first, the case+document+event are one atomic write, a failed write deletes the stored file, a failed job enqueue leaves a recoverable case), storage-path containment, the emailed-link base URL, and job scoping (a request only runs its own case's job). Black-box check: I also ran a production build against a real Postgres with two real users and confirmed over HTTP that a second signed-in user gets 404 on another user's case, document, notes, outcome and approval endpoints (identical to a made-up id), that the owner gets 200, that documents are served with `nosniff` and a sandboxing CSP, and that the case API returns no storage keys. That check also found that only Neon databases worked (now fixed). Not covered: the AI pipeline itself (no live model calls in tests), authentication end to end, and the UI. Database, session, email and rate-limit dependencies are mocked in the route tests.
 
 ## Tech Stack

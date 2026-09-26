@@ -127,6 +127,39 @@ describe("approval gate", () => {
     expect(mocks.db.case.update.mock.calls[0][0].data.status).toBe("submitted");
   });
 
+  describe("shared demo account (public credentials)", () => {
+    beforeEach(() => {
+      mocks.requireUserApi.mockResolvedValue({ id: "demo-user", email: "Demo@Redress.app" });
+      mocks.db.case.findUnique.mockResolvedValue({ id: CASE_ID, userId: "demo-user" });
+      mocks.db.userApproval.findFirst.mockResolvedValue({
+        id: "appr-1",
+        proposedAction: JSON.stringify({ communicationId: "comm-1" }),
+      });
+      mocks.isEmailConfigured.mockReturnValue(true); // a real provider IS configured
+    });
+
+    it("never calls the email provider, even when one is configured", async () => {
+      const res = await call({ decision: "approved", recipientEmail: "victim@example.com" });
+      expect(res.status).toBe(200);
+      expect(mocks.sendClaimEmail).not.toHaveBeenCalled();
+    });
+
+    it("still completes the workflow, labelled as simulated", async () => {
+      await call({ decision: "approved", recipientEmail: "victim@example.com" });
+      expect(mocks.db.case.update.mock.calls[0][0].data.status).toBe("submitted");
+      const message = mocks.db.caseEvent.create.mock.calls[0][0].data.message as string;
+      expect(message).toMatch(/Simulated submission to victim@example\.com/);
+      expect(message).toMatch(/demo account never sends real email/);
+    });
+
+    it("a normal account on the same configuration still sends for real", async () => {
+      mocks.requireUserApi.mockResolvedValue({ id: "user-1", email: "me@example.com" });
+      mocks.db.case.findUnique.mockResolvedValue({ id: CASE_ID, userId: "user-1" });
+      await call({ decision: "approved", recipientEmail: "support@merchant.com" });
+      expect(mocks.sendClaimEmail).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("keeps the approval pending and returns 502 when the provider fails", async () => {
     mocks.sendClaimEmail.mockResolvedValue({ ok: false, error: "provider down" });
     const res = await call({ decision: "approved", recipientEmail: "a@b.com" });
