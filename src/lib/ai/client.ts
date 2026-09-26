@@ -15,4 +15,4 @@ export function getAiClient(): GoogleGenAI | null {
 // their current recommended flash model, so this stays valid as specific
 // model versions are deprecated. Override with GEMINI_MODEL if you want to
 // pin a specific version.
-export const AI_MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-latest";
+export const AI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";

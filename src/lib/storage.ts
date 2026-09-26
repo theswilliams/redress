@@ -13,7 +13,9 @@ import { mkdir, readFile, writeFile, unlink, rm } from "node:fs/promises";
 import path from "node:path";
 import { put, get, del, list } from "@vercel/blob";
 
-const STORAGE_ROOT = path.resolve(process.cwd(), process.env.STORAGE_ROOT ?? "./storage/uploads");
+// turbopackIgnore: this local-disk fallback is only for development; without the hint the bundler
+// traces the whole project into every function that imports storage.
+const STORAGE_ROOT = path.resolve(/* turbopackIgnore: true */ process.cwd(), process.env.STORAGE_ROOT ?? "./storage/uploads");
 
 function blobConfigured(): boolean {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);

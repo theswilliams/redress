@@ -13,6 +13,7 @@ import {
   type OutcomeType,
 } from "@/lib/types";
 import { StatusBadge } from "@/components/status-badge";
+import { isDemoEmail } from "@/lib/demo";
 import { ApprovalPanel } from "./approval-panel";
 import { OutcomePanel } from "./outcome-panel";
 
@@ -30,6 +31,12 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ cas
       approvals: { orderBy: { createdAt: "desc" } },
       outcomes: true,
       policySources: true,
+      analyses: {
+        where: { agent: "claim_drafting" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { flaggedForReview: true, flagReason: true },
+      },
     },
   });
 
@@ -38,11 +45,14 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ cas
   }
 
   const pendingApproval = caseRecord.approvals.find((a) => a.decision === "pending");
-  const pendingCommunication = pendingApproval
-    ? caseRecord.communications.find(
-        (c) => c.id === (JSON.parse(pendingApproval.proposedAction) as { communicationId: string }).communicationId,
-      )
+  const sendingApproval = caseRecord.approvals.find((a) => a.decision === "sending");
+  const proposed = pendingApproval ? readProposedAction(pendingApproval.proposedAction) : null;
+  const pendingCommunication = proposed
+    ? caseRecord.communications.find((c) => c.id === proposed.communicationId)
     : undefined;
+  const latestDraftCheck = caseRecord.analyses[0];
+  const draftWarnings =
+    latestDraftCheck?.flaggedForReview && latestDraftCheck.flagReason ? latestDraftCheck.flagReason.split("; ") : [];
 
   return (
     <div className="flex flex-col gap-8">
@@ -68,12 +78,20 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ cas
         </div>
       )}
 
-      {pendingApproval && pendingCommunication && (
+      {sendingApproval && (
+        <p role="status" className="rounded-xl border border-border bg-card p-4 text-sm">
+          Your approved message is being sent. Refresh in a moment to see the result.
+        </p>
+      )}
+
+      {pendingApproval && pendingCommunication && proposed && (
         <ApprovalPanel
           caseId={caseRecord.id}
           subject={pendingCommunication.subject ?? ""}
           body={pendingCommunication.body}
-          summary={(JSON.parse(pendingApproval.proposedAction) as { summary: string }).summary}
+          summary={proposed.summary}
+          isDemo={isDemoEmail(user.email)}
+          warnings={draftWarnings}
           initialRecipientEmail={pendingCommunication.recipientEmail}
           sendError={
             pendingCommunication.status === "send_failed" ? pendingCommunication.sendError : null
@@ -120,8 +138,8 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ cas
             ))}
           </div>
           <p className="mt-2 text-xs text-muted">
-            General information based on Redress&apos;s knowledge, not verified legal advice or a live check of the
-            merchant&apos;s current policy.
+            These come from the AI model&apos;s general knowledge. Redress doesn&apos;t look up the merchant&apos;s
+            current policy or the law, so treat them as leads to verify, not facts or legal advice.
           </p>
         </section>
       )}
@@ -135,6 +153,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ cas
               href={`/api/documents/${doc.id}`}
               target="_blank"
               rel="noreferrer"
+              aria-label={`Open ${doc.fileName} in a new tab`}
               className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3 text-sm hover:border-brand/40"
             >
               <span>{doc.fileName}</span>
@@ -166,4 +185,14 @@ function Stat({ label, value, className }: { label: string; value: string; class
       <p className={`mt-1 text-lg font-semibold ${className ?? ""}`}>{value}</p>
     </div>
   );
+}
+
+function readProposedAction(json: string): { communicationId: string; summary: string } | null {
+  try {
+    const parsed = JSON.parse(json) as { communicationId?: unknown; summary?: unknown };
+    if (typeof parsed.communicationId !== "string") return null;
+    return { communicationId: parsed.communicationId, summary: typeof parsed.summary === "string" ? parsed.summary : "" };
+  } catch {
+    return null;
+  }
 }

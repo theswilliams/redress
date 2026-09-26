@@ -146,4 +146,7 @@ export const ALLOWED_UPLOAD_MIME_TYPES = [
   "image/webp",
 ] as const;
 
-export const MAX_UPLOAD_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
+// 4 MB: Vercel rejects request bodies over ~4.5 MB before the app sees them, so a larger limit
+// would only produce an opaque platform error instead of this app's clear message.
+export const MAX_UPLOAD_SIZE_BYTES = 4 * 1024 * 1024;
+export const MAX_UPLOAD_SIZE_LABEL = "4 MB";

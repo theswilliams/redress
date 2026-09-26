@@ -5,6 +5,10 @@ import { db } from "@/lib/db";
 import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
 import { isDemoEmail } from "@/lib/demo";
 
+// bcrypt hash of a random, discarded value. Compared against when the email is unknown so a
+// missing account takes as long as a wrong password (no timing signal for account enumeration).
+const DUMMY_PASSWORD_HASH = "$2b$12$6XuJsihAB/3E5pPcqHWlHOeVQr9zCCJkxqlNiOZeu.4dXwN7.zQzC";
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   pages: {
@@ -39,10 +43,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const user = await db.user.findUnique({
           where: { email: normalizedEmail },
         });
-        if (!user) return null;
-
-        const valid = await bcrypt.compare(password, user.passwordHash);
-        if (!valid) return null;
+        const valid = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+        if (!user || !valid) return null;
 
         return { id: user.id, email: user.email, name: user.name ?? undefined };
       },

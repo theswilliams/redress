@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
 import { passwordResetRequestSchema } from "@/lib/validation";
 import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
@@ -7,6 +6,7 @@ import { writeAuditLog } from "@/lib/security/audit";
 import { sendPasswordResetEmail } from "@/lib/email/send";
 import { isDemoEmail } from "@/lib/demo";
 import { appUrl } from "@/lib/appUrl";
+import { newToken } from "@/lib/security/tokens";
 
 export async function POST(request: Request) {
   const ip = getClientIp(request.headers);
@@ -26,10 +26,10 @@ export async function POST(request: Request) {
   // Always respond the same way whether or not the account exists (the shared
   // demo account is silently skipped so its password can't be reset).
   if (user && !isDemoEmail(user.email)) {
-    const token = randomBytes(32).toString("hex");
+    const { token, tokenHash } = newToken();
     await db.passwordResetToken.create({
       data: {
-        token,
+        token: tokenHash, // only the hash is stored; the raw token is in the emailed link
         userId: user.id,
         expiresAt: new Date(Date.now() + 1000 * 60 * 30), // 30 minutes
       },

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatSuccessFeeCopy } from "@/lib/billing/config";
+import { DEMO_EMAIL, DEMO_PASSWORD_HINT } from "@/lib/demo";
 
 const STEPS = [
   {
@@ -8,19 +8,19 @@ const STEPS = [
   },
   {
     title: "AI analyzes your situation",
-    body: "Redress reads the document, extracts the key facts, and asks what problem you're trying to solve.",
+    body: "Redress reads the document and extracts the key facts, marking anything it isn't sure about.",
   },
   {
     title: "Redress finds possible opportunities",
-    body: "A refund, a price adjustment, a billing correction, a cancellation you're owed — with a clear explanation of why.",
+    body: "A refund, a price adjustment, a billing correction, a cancellation you may be owed — with its reasoning and confidence.",
   },
   {
     title: "You review and approve the action",
     body: "Nothing is sent anywhere until you read the proposed message and explicitly approve it.",
   },
   {
-    title: "Redress tracks the outcome",
-    body: "Every case stays visible on your dashboard, from submitted to resolved.",
+    title: "You track the outcome",
+    body: "Every case stays on your dashboard, and you record what the merchant said, from submitted to resolved.",
   },
 ];
 
@@ -43,7 +43,7 @@ export default function Home() {
       <section className="border-b border-border bg-gradient-to-b from-brand-light/70 to-background">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-8 px-4 py-20 text-center sm:px-6 sm:py-28">
           <span className="rounded-full border border-brand/20 bg-brand-light px-4 py-1 text-xs font-semibold uppercase tracking-wide text-brand-dark">
-            AI-powered consumer recovery
+            AI-assisted consumer claims
           </span>
           <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-foreground sm:text-6xl">
             Your money is hiding in the fine print.
@@ -92,7 +92,7 @@ export default function Home() {
       <section id="how-it-works" className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
         <div className="mb-12 text-center">
           <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">How it works</h2>
-          <p className="mt-3 text-muted">Five steps from &quot;I think I got ripped off&quot; to money back in your account.</p>
+          <p className="mt-3 text-muted">Five steps from &quot;I think I got overcharged&quot; to a message you&apos;ve checked and approved.</p>
         </div>
         <ol className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
           {STEPS.map((step, i) => (
@@ -130,7 +130,7 @@ export default function Home() {
               },
               {
                 title: "Not legal advice",
-                body: "Redress gives general information, not legal advice, and never claims to be your attorney.",
+                body: "Redress is not a law firm. It gives general information, can be wrong, and never claims to be your attorney.",
               },
             ].map((item) => (
               <div key={item.title} className="rounded-xl border border-border bg-card p-5">
@@ -142,22 +142,37 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Pricing */}
+      {/* Try it */}
       <section className="mx-auto w-full max-w-4xl px-4 py-20 text-center sm:px-6">
-        <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Free to find out</h2>
-        <p className="mx-auto mt-4 max-w-xl text-muted">{formatSuccessFeeCopy()}</p>
+        <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Try the demo</h2>
+        <p className="mx-auto mt-4 max-w-xl text-muted">
+          Redress is a portfolio project, not a commercial service: there are no fees and no payments. Sign in to the
+          shared demo account to see seeded example cases. Anything you approve there is simulated, and no email is
+          sent.
+        </p>
+        <p className="mt-4 text-sm">
+          <span className="text-muted">Email</span> <code className="font-mono">{DEMO_EMAIL}</code>{" "}
+          <span className="ml-3 text-muted">Password</span> <code className="font-mono">{DEMO_PASSWORD_HINT}</code>
+        </p>
         <Link
-          href="/signup"
+          href="/signin"
           className="mt-8 inline-block rounded-full bg-brand px-7 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-brand-dark"
         >
-          Find My Money
+          Open the demo
         </Link>
       </section>
 
       <footer className="border-t border-border py-8">
         <div className="mx-auto max-w-6xl px-4 text-center text-sm text-muted sm:px-6">
-          Redress provides general information, not legal advice, and takes no external action without your
-          approval.
+          <p>
+            Redress provides general information, not legal advice, and takes no external action without your
+            approval.
+          </p>
+          <p className="mt-2">
+            <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
+            <span aria-hidden="true"> · </span>
+            <Link href="/terms" className="hover:text-foreground">Terms</Link>
+          </p>
         </div>
       </footer>
     </div>

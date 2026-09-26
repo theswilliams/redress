@@ -54,7 +54,7 @@ export function OutcomePanel({ caseId, status }: { caseId: string; status: strin
         Once the merchant responds (or you hear nothing), record the outcome here to keep your dashboard accurate.
       </p>
 
-      {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {recording ? (
         <div className="mt-4 flex flex-col gap-3">

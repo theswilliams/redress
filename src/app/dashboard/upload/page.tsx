@@ -2,10 +2,20 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { PROBLEM_CATEGORIES, PROBLEM_CATEGORY_LABELS, type ProblemCategory } from "@/lib/types";
+import {
+  MAX_UPLOAD_SIZE_BYTES,
+  MAX_UPLOAD_SIZE_LABEL,
+  PROBLEM_CATEGORIES,
+  PROBLEM_CATEGORY_LABELS,
+  type ProblemCategory,
+} from "@/lib/types";
+import { isDemoEmail } from "@/lib/demo";
+import { useSession } from "next-auth/react";
 
 export default function UploadPage() {
   const router = useRouter();
+  const { data: session } = useSession();
+  const isDemo = isDemoEmail(session?.user?.email);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [problemCategory, setProblemCategory] = useState<ProblemCategory | null>(null);
@@ -25,6 +35,10 @@ export default function UploadPage() {
     }
     if (!file) {
       setError("Upload a document to continue.");
+      return;
+    }
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      setError(`That file is too large. The limit is ${MAX_UPLOAD_SIZE_LABEL}.`);
       return;
     }
 
@@ -57,12 +71,23 @@ export default function UploadPage() {
         <p className="mt-1 text-sm text-muted">Pick the closest match — Redress will confirm the details.</p>
       </div>
 
+      {isDemo && (
+        <div role="note" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+          <p className="font-semibold">You&apos;re on the shared demo account.</p>
+          <p className="mt-1">
+            Every visitor can see what you upload here, and it&apos;s deleted in the daily reset. Don&apos;t upload
+            real receipts or anything with personal information — use a made-up or redacted document.
+          </p>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="flex flex-col gap-8">
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Problem type">
           {PROBLEM_CATEGORIES.map((category) => (
             <button
               key={category}
               type="button"
+              aria-pressed={problemCategory === category}
               onClick={() => setProblemCategory(category)}
               className={`rounded-xl border p-4 text-left text-sm font-medium transition ${
                 problemCategory === category
@@ -90,14 +115,14 @@ export default function UploadPage() {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium">Upload your document</label>
-          <div className="rounded-xl border border-dashed border-border bg-card p-6 text-center">
+          <p className="mb-1 block text-sm font-medium">Upload your document</p>
+          <div className="rounded-xl border border-dashed border-border bg-card p-6 text-center focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/30">
             <input
               ref={fileInputRef}
               type="file"
               accept="application/pdf,image/png,image/jpeg,image/webp"
               onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
-              className="hidden"
+              className="sr-only"
               id="file-upload"
             />
             <label htmlFor="file-upload" className="cursor-pointer text-sm">
@@ -106,14 +131,18 @@ export default function UploadPage() {
               ) : (
                 <>
                   <span className="font-semibold text-brand">Choose a file</span>{" "}
-                  <span className="text-muted">or drag it here — PDF, PNG, JPEG, or WEBP, up to 15MB</span>
+                  <span className="text-muted">— PDF, PNG, JPEG, or WEBP, up to {MAX_UPLOAD_SIZE_LABEL}</span>
                 </>
               )}
             </label>
           </div>
         </div>
 
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
 
         <button
           type="submit"
@@ -122,6 +151,11 @@ export default function UploadPage() {
         >
           {loading ? "Analyzing your document…" : "Analyze my document"}
         </button>
+        <p className="text-xs text-muted">
+          Your document is sent to Google&apos;s Gemini API for analysis. Redress gives general information, not
+          legal advice, and the result can be wrong — you review everything before anything is sent. See{" "}
+          <a href="/privacy" className="underline hover:text-foreground">Privacy</a>.
+        </p>
       </form>
     </div>
   );

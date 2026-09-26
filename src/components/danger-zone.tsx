@@ -67,7 +67,7 @@ export function DangerZone() {
             />
           </div>
 
-          {error && <p className="text-sm text-red-700 dark:text-red-400">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p>}
 
           <div className="flex gap-2">
             <button

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireUserApi } from "@/lib/session";
 import { newCaseSchema } from "@/lib/validation";
-import { ALLOWED_UPLOAD_MIME_TYPES, DOCUMENT_STATUS, MAX_UPLOAD_SIZE_BYTES } from "@/lib/types";
+import { ALLOWED_UPLOAD_MIME_TYPES, DOCUMENT_STATUS, MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_LABEL } from "@/lib/types";
 import { saveUpload, deleteUpload } from "@/lib/storage";
 import { enqueueJob, runCaseJobsInline } from "@/lib/jobs/queue";
 import { rateLimit, getClientIp } from "@/lib/security/rateLimit";
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unsupported file type. Upload a PDF, PNG, JPEG, or WEBP." }, { status: 400 });
   }
   if (file.size > MAX_UPLOAD_SIZE_BYTES) {
-    return NextResponse.json({ error: "File is too large. Max size is 15MB." }, { status: 400 });
+    return NextResponse.json({ error: `File is too large. Max size is ${MAX_UPLOAD_SIZE_LABEL}.` }, { status: 400 });
   }
   if (file.size === 0) {
     return NextResponse.json({ error: "The uploaded file is empty." }, { status: 400 });

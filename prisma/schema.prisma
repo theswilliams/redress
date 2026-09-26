@@ -5,9 +5,9 @@
 // has no native enum support. Kept this way after the move to PostgreSQL so
 // the two stay in sync without a migration.
 //
-// Runs on Postgres (Vercel Postgres / Neon) via @prisma/adapter-neon — see
-// src/lib/db.ts. Local dev also points at a real Postgres database (a Neon
-// branch is the easiest option); there is no SQLite fallback.
+// Runs on PostgreSQL through a Prisma driver adapter chosen from the connection
+// string (Neon serverless driver for *.neon.tech, node-postgres otherwise) — see
+// src/lib/db.ts and src/lib/dbDriver.ts.
 
 generator client {
   provider = "prisma-client"
@@ -31,8 +31,6 @@ model User {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  // Business model config snapshot for this user (see BillingConfig).
-  // Kept denormalized-simple for MVP; see Subscription for plan state.
   cases                Case[]
   documents            Document[]
   approvals            UserApproval[]
@@ -266,7 +264,7 @@ model UserApproval {
 
   actionType     String   // submit_claim | cancel_subscription | request_refund | other
   proposedAction String   // JSON snapshot of what will happen
-  decision       String   @default("pending") // pending | approved | rejected | edited
+  decision       String   @default("pending") // pending | sending (claimed by one approval request) | approved | rejected
   decisionNotes  String?
   decidedAt      DateTime?
 
@@ -299,7 +297,7 @@ model RecoveryOutcome {
 }
 
 // ---------------------------------------------------------------------------
-// Billing (configurable, not hard-coded to one fee model)
+// Billing — schema only. The app has no payments: nothing reads or writes these tables.
 // ---------------------------------------------------------------------------
 
 model Subscription {
@@ -339,7 +337,8 @@ model Payment {
 }
 
 // ---------------------------------------------------------------------------
-// Background jobs (DB-backed queue for long-running AI workflows)
+// Jobs — a durable record of each analysis run. Jobs execute inline inside the
+// request that created them (src/lib/jobs/queue.ts); there is no background worker.
 // ---------------------------------------------------------------------------
 
 model Job {

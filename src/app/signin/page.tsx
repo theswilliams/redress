@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { DEMO_EMAIL, DEMO_PASSWORD_HINT } from "@/lib/demo";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -34,6 +35,24 @@ export default function SignInPage() {
       <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
       <p className="mt-1 text-sm text-muted">Welcome back.</p>
 
+      <div className="mt-6 rounded-xl border border-border bg-card p-4 text-sm">
+        <p className="font-medium">Just looking around?</p>
+        <p className="mt-1 text-muted">
+          Use the shared demo account. It has example cases, anything you add is visible to other visitors and is
+          reset daily, and approving a message there never sends a real email.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setEmail(DEMO_EMAIL);
+            setPassword(DEMO_PASSWORD_HINT);
+          }}
+          className="mt-3 rounded-full border border-border px-4 py-1.5 text-sm font-semibold hover:border-brand/40"
+        >
+          Fill in the demo account
+        </button>
+      </div>
+
       <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
         <div>
           <label htmlFor="email" className="mb-1 block text-sm font-medium">
@@ -42,6 +61,7 @@ export default function SignInPage() {
           <input
             id="email"
             type="email"
+            autoComplete="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -60,6 +80,7 @@ export default function SignInPage() {
           <input
             id="password"
             type="password"
+            autoComplete="current-password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -67,7 +88,11 @@ export default function SignInPage() {
           />
         </div>
 
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
 
         <button
           type="submit"

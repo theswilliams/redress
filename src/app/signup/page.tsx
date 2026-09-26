@@ -94,7 +94,17 @@ export default function SignUpPage() {
           <p className="mt-1 text-xs text-muted">At least 8 characters.</p>
         </div>
 
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
+        <p className="text-xs text-muted">
+          By creating an account you agree to the{" "}
+          <Link href="/terms" className="underline hover:text-foreground">terms</Link> and acknowledge the{" "}
+          <Link href="/privacy" className="underline hover:text-foreground">privacy notice</Link>. Redress is not a law
+          firm and doesn&apos;t give legal advice.
+        </p>
 
         <button
           type="submit"

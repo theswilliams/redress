@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { hashToken } from "@/lib/security/tokens";
 
 async function verify(token: string | undefined) {
   if (!token) return { ok: false as const, message: "This verification link is missing a token." };
 
-  const record = await db.emailVerificationToken.findUnique({ where: { token } });
+  const record = await db.emailVerificationToken.findUnique({ where: { token: hashToken(token) } });
   if (!record) return { ok: false as const, message: "This verification link is invalid." };
   if (record.usedAt) return { ok: true as const, message: "Your email is already verified." };
   if (record.expiresAt < new Date()) {

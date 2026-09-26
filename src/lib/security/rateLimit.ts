@@ -19,6 +19,15 @@ function getRedis(): Redis | null {
   return redis;
 }
 
+let warnedNoRedis = false;
+function warnIfProductionWithoutRedis() {
+  if (warnedNoRedis || process.env.NODE_ENV !== "production") return;
+  warnedNoRedis = true;
+  console.warn(
+    "[redress] UPSTASH_REDIS_REST_URL/TOKEN are not set: rate limits are per-instance memory only and do not hold on serverless hosting.",
+  );
+}
+
 type Bucket = { count: number; resetAt: number };
 const memoryBuckets = new Map<string, Bucket>();
 
@@ -45,6 +54,7 @@ export async function rateLimit(
 ): Promise<{ allowed: boolean; remaining: number }> {
   const client = getRedis();
   if (!client) {
+    warnIfProductionWithoutRedis();
     return memoryRateLimit(key, limit, windowMs);
   }
 

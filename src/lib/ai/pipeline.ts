@@ -4,7 +4,7 @@ import { runDocumentAnalysisAgent } from "@/lib/ai/documentAnalysisAgent";
 import { runOpportunityDetectionAgent } from "@/lib/ai/opportunityDetectionAgent";
 import { runResearchAgent } from "@/lib/ai/researchAgent";
 import { runClaimDraftingAgent } from "@/lib/ai/claimDraftingAgent";
-import { reviewClaimDraft, reviewResearchCertainty } from "@/lib/ai/safetyLayer";
+import { decideCaseStatus, normalizeResearchCertainty, reviewClaimDraft } from "@/lib/ai/safetyLayer";
 import { isAiConfigured } from "@/lib/ai/callAgent";
 import type { ProblemCategory } from "@/lib/types";
 
@@ -98,12 +98,13 @@ export async function runAnalysisPipeline(caseId: string, documentId: string) {
   });
 
   // 3. Research Agent
-  const research = await runResearchAgent({
+  const rawResearch = await runResearchAgent({
     merchant: documentAnalysis.merchant.value,
     opportunity,
   });
-
-  const researchReview = reviewResearchCertainty(research.findings);
+  // No source is ever fetched, so model recall is never shown as "confirmed policy".
+  const { findings: normalizedFindings, downgraded } = normalizeResearchCertainty(rawResearch.findings);
+  const research = { ...rawResearch, findings: normalizedFindings };
 
   await db.aIAnalysis.create({
     data: {
@@ -111,9 +112,9 @@ export async function runAnalysisPipeline(caseId: string, documentId: string) {
       documentId,
       agent: "research",
       input: JSON.stringify({ merchant: documentAnalysis.merchant.value }),
-      output: JSON.stringify(research),
-      flaggedForReview: researchReview.flagged,
-      flagReason: researchReview.reasons.join("; ") || undefined,
+      output: JSON.stringify(rawResearch),
+      flaggedForReview: false,
+      flagReason: downgraded > 0 ? `${downgraded} finding(s) the model labelled "confirmed policy" shown as "likely possibility": no source was checked.` : undefined,
     },
   });
 
@@ -137,7 +138,9 @@ export async function runAnalysisPipeline(caseId: string, documentId: string) {
     research,
   });
 
-  const draftReview = reviewClaimDraft(draft.body, draft.subject);
+  const draftReview = reviewClaimDraft(draft.body, draft.subject, {
+    knownAmountsCents: [documentAnalysis.amountCents.value, opportunity.potentialAmountCents],
+  });
 
   await db.aIAnalysis.create({
     data: {
@@ -179,10 +182,11 @@ export async function runAnalysisPipeline(caseId: string, documentId: string) {
   await db.communication.update({ where: { id: communication.id }, data: { approvalId: approval.id } });
 
   // 5. Case Management Agent: decide the case's next status and headline fields.
-  const nextStatus =
-    !opportunity.hasOpportunity || draftReview.flagged || researchReview.flagged
-      ? "information_needed"
-      : "ready_for_review";
+  const nextStatus = decideCaseStatus({
+    aiConfigured: isAiConfigured(),
+    hasOpportunity: opportunity.hasOpportunity,
+    draftFlagged: draftReview.flagged,
+  });
 
   await db.case.update({
     where: { id: caseId },
@@ -204,7 +208,7 @@ export async function runAnalysisPipeline(caseId: string, documentId: string) {
       message: isAiConfigured()
         ? `Redress analyzed your document and found a possible ${opportunity.caseType.replace(/_/g, " ")} opportunity.`
         : "Analysis ran in demo mode (no GEMINI_API_KEY configured) — connect an API key for real analysis.",
-      metadata: JSON.stringify({ opportunity, flagged: draftReview.flagged || researchReview.flagged }),
+      metadata: JSON.stringify({ opportunity, flagged: draftReview.flagged, flagReasons: draftReview.reasons }),
     },
   });
 

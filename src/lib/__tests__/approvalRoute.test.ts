@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   db: {
     user: { findUnique: vi.fn() },
     case: { findUnique: vi.fn(), update: vi.fn() },
-    userApproval: { findFirst: vi.fn(), update: vi.fn() },
+    userApproval: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     communication: { findUnique: vi.fn(), update: vi.fn() },
     caseEvent: { create: vi.fn() },
   },
@@ -58,8 +58,9 @@ beforeEach(() => {
     body: "Hello, I would like a refund for order 123.",
   });
   mocks.sendClaimEmail.mockResolvedValue({ ok: true, providerMessageId: "msg-1" });
-  mocks.isEmailConfigured.mockReturnValue(false);
+  mocks.isEmailConfigured.mockReturnValue(true);
   mocks.db.user.findUnique.mockResolvedValue({ emailVerifiedAt: new Date() });
+  mocks.db.userApproval.updateMany.mockResolvedValue({ count: 1 });
 });
 
 const sentUpdate = () =>
@@ -168,6 +169,51 @@ describe("approval gate", () => {
     expect(mocks.db.communication.update.mock.calls[0][0].data.status).toBe("send_failed");
     expect(mocks.db.userApproval.update).not.toHaveBeenCalled();
     expect(mocks.db.case.update).not.toHaveBeenCalled();
+    // the claim is released (sending -> pending) so the user can retry
+    const release = mocks.db.userApproval.updateMany.mock.calls.at(-1)![0];
+    expect(release).toEqual({ where: { id: "appr-1", decision: "sending" }, data: { decision: "pending" } });
+  });
+
+  describe("one-time send (concurrent or replayed approvals)", () => {
+    it("claims the approval atomically (pending -> sending) before sending", async () => {
+      await call({ decision: "approved", recipientEmail: "a@b.com" });
+      const claim = mocks.db.userApproval.updateMany.mock.calls[0][0];
+      expect(claim).toEqual({ where: { id: "appr-1", decision: "pending" }, data: { decision: "sending" } });
+      const claimOrder = mocks.db.userApproval.updateMany.mock.invocationCallOrder[0];
+      expect(claimOrder).toBeLessThan(mocks.sendClaimEmail.mock.invocationCallOrder[0]);
+    });
+
+    it("a request that loses the claim gets 409 and never sends", async () => {
+      mocks.db.userApproval.updateMany.mockResolvedValue({ count: 0 }); // another request already claimed it
+      const res = await call({ decision: "approved", recipientEmail: "a@b.com" });
+      expect(res.status).toBe(409);
+      expect(mocks.sendClaimEmail).not.toHaveBeenCalled();
+      expect(sentUpdate()).toBeUndefined();
+      expect(mocks.db.case.update).not.toHaveBeenCalled();
+    });
+
+    it("two concurrent approvals send exactly once", async () => {
+      // Simulate the database: the first conditional update wins, the second matches nothing.
+      let state = "pending";
+      mocks.db.userApproval.updateMany.mockImplementation(async ({ where, data }) => {
+        if (where.decision !== state) return { count: 0 };
+        state = data.decision;
+        return { count: 1 };
+      });
+      const [a, b] = await Promise.all([
+        call({ decision: "approved", recipientEmail: "a@b.com" }),
+        call({ decision: "approved", recipientEmail: "a@b.com" }),
+      ]);
+      expect([a.status, b.status].sort()).toEqual([200, 409]);
+      expect(mocks.sendClaimEmail).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejecting an already-handled approval returns 409 and changes nothing", async () => {
+      mocks.db.userApproval.updateMany.mockResolvedValue({ count: 0 });
+      const res = await call({ decision: "rejected" });
+      expect(res.status).toBe(409);
+      expect(mocks.db.case.update).not.toHaveBeenCalled();
+    });
   });
 
   it("editing a draft never sends anything", async () => {

@@ -22,4 +22,4 @@ export function isEmailConfigured(): boolean {
  * https://resend.com/docs/dashboard/domains/introduction. Set EMAIL_FROM to a
  * verified address once a domain is set up to send to arbitrary merchants.
  */
-export const EMAIL_FROM = process.env.EMAIL_FROM ?? "Redress <onboarding@resend.dev>";
+export const EMAIL_FROM = process.env.EMAIL_FROM || "Redress <onboarding@resend.dev>";

@@ -21,13 +21,13 @@ export async function POST(request: Request) {
 
   const { name, email, password } = parsed.data;
 
+  // Hash first, so an already-registered email takes as long as a new one (no timing signal).
+  const passwordHash = await bcrypt.hash(password, 12);
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) {
     // Do not reveal which emails are registered.
     return NextResponse.json({ ok: true });
   }
-
-  const passwordHash = await bcrypt.hash(password, 12);
   const user = await db.user.create({
     data: { email, name, passwordHash },
   });
